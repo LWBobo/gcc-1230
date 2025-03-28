@@ -24,6 +24,12 @@ along with this program; see the file COPYING3.  If not see
 #include "cpplib.h"
 #include "internal.h"
 
+#ifndef ZHAOCW_20250328_FUNC-SIMD
+#include "omp_global.h"
+bool parser_omp_clause = false;
+char extern_omp_clause[500];
+#endif
+
 enum spell_type
 {
   SPELL_OPERATOR = 0,
@@ -4331,7 +4337,19 @@ _cpp_lex_direct (cpp_reader *pfile)
     case ')': result->type = CPP_CLOSE_PAREN; break;
     case '[': result->type = CPP_OPEN_SQUARE; break;
     case ']': result->type = CPP_CLOSE_SQUARE; break;
+  #ifndef ZHAOCW_20250328_FUNC-SIMD
+    case '{': 
+    {
+      result->type = CPP_OPEN_BRACE;
+      if(parser_omp_clause)
+      {
+        int len = liull_lookup_with_hash (buffer->cur - 1);
+      }
+      break;
+    }
+  #else
     case '{': result->type = CPP_OPEN_BRACE; break;
+  #endif
     case '}': result->type = CPP_CLOSE_BRACE; break;
     case ';': result->type = CPP_SEMICOLON; break;
 

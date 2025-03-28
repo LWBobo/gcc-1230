@@ -22,7 +22,9 @@ along with this program; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "symtab.h"
-
+#ifndef ZHAOCW_20250328_FUNC-SIMD
+#include "omp_global.h"
+#endif
 /* The code below is a specialization of Vladimir Makarov's expandable
    hash tables (see libiberty/hashtab.c).  The abstraction penalty was
    too high to continue using the generic form.  This code knows
@@ -94,6 +96,28 @@ ht_lookup (cpp_hash_table *table, const unsigned char *str, size_t len,
   return ht_lookup_with_hash (table, str, len, calc_hash (str, len),
 			      insert);
 }
+
+#ifndef ZHAOCW_20250328_FUNC-SIMD
+int
+liull_lookup_with_hash(const unsigned char *str)
+{
+  const unsigned char *cur;
+  unsigned int len;
+  // unsigned char ss[100];
+  int i = 0;
+  cur = str;
+  while (*cur != '}' && i < 498 && *cur != '\0')
+  {
+    // ss[i] = *cur;
+    extern_omp_clause[i] = *cur;
+    cur++;
+    i++;
+  }
+  extern_omp_clause[i] = *cur;
+  parser_omp_clause = false;
+  return i;
+}
+#endif
 
 hashnode
 ht_lookup_with_hash (cpp_hash_table *table, const unsigned char *str,

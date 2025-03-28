@@ -78,6 +78,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "c-family/c-ubsan.h"
 #include "gcc-urlifier.h"
 
+#ifndef ZHAOCW_20250328_FUNC-SIMD
+#include "../../libcpp/omp_global.h"
+#endif
 /* We need to walk over decls with incomplete struct/union/enum types
    after parsing the whole translation unit.
    In finish_decl(), if the decl is static, has incomplete
@@ -21534,8 +21537,28 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  clauses = c_parser_omp_clause_nocontext (parser, clauses);
 	  break;
 	default:
-	  c_parser_error (parser, "expected an OpenMP clause");
-	  goto saw_error;
+	#ifndef ZHAOCW_20250328_FUNC-SIMD
+	{
+		gcc_assert (parser->in_pragma);
+		parser->in_pragma = false;
+		bool type_eol = c_parser_peek_token (parser)->type != CPP_PRAGMA_EOL;
+		cpp_ttype token_type;
+		do
+		{
+		  c_token *token = c_parser_peek_token (parser);
+		  token_type = token->type;
+		  if (token_type == CPP_EOF)
+			  break;
+		  c_parser_consume_token (parser);
+		} while (token_type != CPP_PRAGMA_EOL);
+  
+		parser->error = false;
+		goto new_saw_error;
+	}
+	#else
+		c_parser_error (parser, "expected an OpenMP clause");
+		goto saw_error;
+	#endif
 	}
 
       first = false;
@@ -21552,7 +21575,10 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
  saw_error:
   if (!nested)
     c_parser_skip_to_pragma_eol (parser);
-
+#ifndef ZHAOCW_20250328_FUNC-SIMD
+new_saw_error:
+	parser_omp_clause = false;
+#endif
   if (finish_p)
     {
       if ((mask & (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_UNIFORM)) != 0)

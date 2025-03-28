@@ -66,6 +66,9 @@ DEFTIMEVAR (TV_PCH_PTR_SORT          , "PCH pointer sort")
 DEFTIMEVAR (TV_PCH_RESTORE           , "PCH main state restore")
 DEFTIMEVAR (TV_PCH_CPP_RESTORE       , "PCH preprocessor state restore")
 
+/* ZHAOCW_20250328_FUNC-SIMD */
+DEFTIMEVAR (TV_AUTO_OMPCLAUSE        , "tree auto ompclause")
+/* ZHAOCW_20250328_FUNC-SIMD END*/
 DEFTIMEVAR (TV_CGRAPH                , "callgraph construction")
 DEFTIMEVAR (TV_CGRAPHOPT             , "callgraph optimization")
 DEFTIMEVAR (TV_CGRAPH_FUNC_EXPANSION , "callgraph functions expansion")
