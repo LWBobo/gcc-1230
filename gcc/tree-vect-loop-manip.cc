@@ -2038,6 +2038,10 @@ bool
 slpeel_can_duplicate_loop_p (const class loop *loop, const_edge exit_e,
 			     const_edge e)
 {
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd && loop->tasksimd ==1)
+    return true;
+#endif
   edge entry_e = loop_preheader_edge (loop);
   gcond *orig_cond = get_loop_exit_condition (exit_e);
   gimple_stmt_iterator loop_exit_gsi = gsi_last_bb (exit_e->src);

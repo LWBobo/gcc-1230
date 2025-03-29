@@ -2091,6 +2091,10 @@ make_forwarders_with_degenerate_phis (function *fn)
 static unsigned int
 perform_tree_ssa_dce (bool aggressive)
 {
+	#ifndef ZHAOCW_20250329_TASK-SIMD
+		if (flag_task_simd)
+			return 1;
+	#endif
   bool something_changed = 0;
   unsigned todo = 0;
 

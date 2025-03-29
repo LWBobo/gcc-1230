@@ -14010,6 +14010,10 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	case OMP_CLAUSE_MERGEABLE:
 	case OMP_CLAUSE_PROC_BIND:
 	case OMP_CLAUSE_SAFELEN:
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	case OMP_CLAUSE_TILESIMD:
+	case OMP_CLAUSE_TASKSIMD:
+#endif
 	case OMP_CLAUSE_SIMDLEN:
 	case OMP_CLAUSE_NOGROUP:
 	case OMP_CLAUSE_THREADS:
@@ -15441,6 +15445,10 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 	case OMP_CLAUSE_MERGEABLE:
 	case OMP_CLAUSE_PROC_BIND:
 	case OMP_CLAUSE_SAFELEN:
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	case OMP_CLAUSE_TILESIMD:
+	case OMP_CLAUSE_TASKSIMD:
+#endif	
 	case OMP_CLAUSE_SIMDLEN:
 	case OMP_CLAUSE_DEPEND:
 	case OMP_CLAUSE_DOACROSS:

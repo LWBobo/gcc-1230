@@ -354,6 +354,9 @@ extern void register_pass (opt_pass* pass, pass_positioning_ops pos,
 #ifndef ZHAOCW_20250328_FUNC-SIMD
 extern gimple_opt_pass *make_pass_auto_ompclause (gcc::context *ctxt);
 #endif
+#ifndef ZHAOCW_20250329_TASK-SIMD
+extern gimple_opt_pass * make_pass_manual_vect(gcc::context *ctxt);
+#endif
 extern gimple_opt_pass *make_pass_asan (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_asan_O0 (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_tsan (gcc::context *ctxt);

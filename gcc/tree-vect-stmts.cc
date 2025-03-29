@@ -62,6 +62,155 @@ along with GCC; see the file COPYING3.  If not see
 /* For lang_hooks.types.type_for_mode.  */
 #include "langhooks.h"
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+
+#include "diagnostic.h"
+
+/* Return the "base" type from TYPE that is suitable to apply attribute
+   vector_size to by stripping arrays, function types, etc.  */
+static tree
+type_for_vector_size_128(tree type)
+{
+	/* We need to provide for vector pointers, vector arrays, and
+	   functions returning vectors.  For example:
+
+		 __attribute__((vector_size(16))) short *foo;
+
+	   In this case, the mode is SI, but the type being modified is
+	   HI, so we need to look further.  */
+
+	while (POINTER_TYPE_P(type) 
+	|| TREE_CODE(type) == FUNCTION_TYPE 
+	|| TREE_CODE(type) == METHOD_TYPE 
+	|| TREE_CODE(type) == ARRAY_TYPE 
+	|| TREE_CODE(type) == OFFSET_TYPE)
+		type = TREE_TYPE(type);
+
+	return type;
+}
+
+static tree
+type_valid_for_vector_size_128(tree type, tree atname, tree args,
+							   unsigned HOST_WIDE_INT *ptrnunits)
+{
+	bool error_p = ptrnunits != NULL;
+
+	/* Get the mode of the type being modified.  */
+	machine_mode orig_mode = TYPE_MODE(type);
+
+	if ((!INTEGRAL_TYPE_P(type) 
+		&& !SCALAR_FLOAT_TYPE_P(type) 
+		&& !FIXED_POINT_TYPE_P(type))
+	 || (!SCALAR_FLOAT_MODE_P(orig_mode) 
+	 	&& GET_MODE_CLASS(orig_mode) != MODE_INT 
+	 	&& !ALL_SCALAR_FIXED_POINT_MODE_P(orig_mode))
+	 || !tree_fits_uhwi_p(TYPE_SIZE_UNIT(type)) || TREE_CODE(type) == BOOLEAN_TYPE)
+	{
+		if (error_p)
+			error("invalid vector type for attribute %qE", atname);
+		else
+			warning(OPT_Wattributes, "invalid vector type for attribute %qE",
+					atname);
+		return NULL_TREE;
+	}
+
+	/* When no argument has been provided this is just a request to validate
+	   the type above.  Return TYPE to indicate success.  */
+	if (!args)
+		return type;
+
+	tree size = TREE_VALUE(args);
+	/* Erroneous arguments have already been diagnosed.  */
+	if (size == error_mark_node)
+		return NULL_TREE;
+
+	// if (size && TREE_CODE(size) != IDENTIFIER_NODE && TREE_CODE(size) != FUNCTION_DECL)
+	//   size = default_conversion(size);
+
+	if (TREE_CODE(size) != INTEGER_CST)
+	{
+		if (error_p)
+			error("%qE attribute argument value %qE is not an integer constant",
+				  atname, size);
+		else
+			warning(OPT_Wattributes,
+					"%qE attribute argument value %qE is not an integer constant",
+					atname, size);
+		return NULL_TREE;
+	}
+
+	if (!TYPE_UNSIGNED(TREE_TYPE(size)) && tree_int_cst_sgn(size) < 0)
+	{
+		if (error_p)
+			error("%qE attribute argument value %qE is negative",
+				  atname, size);
+		else
+			warning(OPT_Wattributes,
+					"%qE attribute argument value %qE is negative",
+					atname, size);
+		return NULL_TREE;
+	}
+
+	/* The attribute argument value is constrained by the maximum bit
+	   alignment representable in unsigned int on the host.  */
+	unsigned HOST_WIDE_INT vecsize;
+	unsigned HOST_WIDE_INT maxsize = tree_to_uhwi(max_object_size());
+	if (!tree_fits_uhwi_p(size) || (vecsize = tree_to_uhwi(size)) > maxsize)
+	{
+		if (error_p)
+			error("%qE attribute argument value %qE exceeds %wu",
+				  atname, size, maxsize);
+		else
+			warning(OPT_Wattributes,
+					"%qE attribute argument value %qE exceeds %wu",
+					atname, size, maxsize);
+		return NULL_TREE;
+	}
+
+	if (vecsize % tree_to_uhwi(TYPE_SIZE_UNIT(type)))
+	{
+		if (error_p)
+			error("vector size not an integral multiple of component size");
+		return NULL_TREE;
+	}
+
+	if (vecsize == 0)
+	{
+		error("zero vector size");
+		return NULL;
+	}
+
+	/* Calculate how many units fit in the vector.  */
+	unsigned HOST_WIDE_INT nunits = vecsize / tree_to_uhwi(TYPE_SIZE_UNIT(type));
+	if (nunits & (nunits - 1))
+	{
+		if (error_p)
+			error("number of vector components %wu not a power of two", nunits);
+		else
+			warning(OPT_Wattributes,
+					"number of vector components %wu not a power of two", nunits);
+		return NULL_TREE;
+	}
+
+	if (nunits >= (unsigned HOST_WIDE_INT)INT_MAX)
+	{
+		if (error_p)
+			error("number of vector components %wu exceeds %d",
+				  nunits, INT_MAX - 1);
+		else
+			warning(OPT_Wattributes,
+					"number of vector components %wu exceeds %d",
+					nunits, INT_MAX - 1);
+		return NULL_TREE;
+	}
+
+	if (ptrnunits)
+		*ptrnunits = nunits;
+
+	return type;
+}
+#endif
+
 /* Return the vectorized type for the given statement.  */
 
 tree
@@ -202,6 +351,306 @@ read_vector_array (vec_info *vinfo,
 /* ARRAY is an array of vectors created by create_vector_array.
    Emit code to store SSA_NAME VECT in index N of the array.
    The store is part of the vectorization of STMT_INFO.  */
+
+#ifndef ZHAOCW_20250329_TASK-SIMD
+
+   // 获取bb所在内层loop
+   static loop_p stmt_in_loop(gimple *stmt)
+   {
+	   struct loop *current_loop = NULL;
+	   // 获取语句所在的基本块
+	   // basic_block bb = gimple_bb(stmt);
+   
+	   // // 如果语句没有关联的基本块，返回 false
+	   // if (!bb)
+	   // 	return NULL;
+   
+	   // 获取当前函数
+	   function *fn = cfun;
+   
+	   // 获取当前函数的循环列表
+	   vec<loop_p, va_gc> *loops = get_loops(fn); // 获取函数中的循环列表
+   
+	   // 如果没有循环，返回 false
+	   if (!loops)
+		   return NULL;
+   
+	   // 遍历所有循环，查找语句所在的循环
+	   int numloop = loops->length();
+	   for (size_t i = 0; i < loops->length(); ++i)
+	   {
+		   struct loop *l = (*loops)[i]; // 获取循环
+		   if (!l)
+			   continue;
+		   // // 检查基本块的头节点是否在当前循环中
+		   // if (l->header == bb)
+		   // {
+		   // 	current_loop = l; // 找到语句所在的循环
+		   // 	break;
+		   // }
+		   basic_block *bbs = get_loop_body(l);
+		   if (!bbs)
+			   continue;
+		   gimple_stmt_iterator gsi;
+   
+		   for (unsigned int j = 0; j < l->num_nodes; j++)
+		   {
+			   basic_block bb = bbs[j];
+			   for (gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi))
+			   {
+				   gimple *stmt_gsi = gsi_stmt(gsi);
+				   if (stmt == stmt_gsi)
+				   {
+					   current_loop = l;
+				   }
+			   }
+		   }
+		   if (current_loop && !(current_loop->inner))
+		   {
+			   return current_loop;
+		   }
+	   }
+   
+	   return current_loop;
+   }
+   
+   // 获取语句是否位于嵌套循环中
+   static bool is_stmt_in_tasksimd_loop(gimple *stmt)
+   {
+   
+	   struct loop *current_loop = NULL;
+	   current_loop = stmt_in_loop(stmt);
+	   // 如果没有找到对应的循环，返回 false
+	   if (!current_loop)
+		   return false;
+   
+	   // 计算循环嵌套深度
+	   unsigned depth = 0;
+	   while (current_loop)
+	   {
+		   if (current_loop->tasksimd)
+			   return true;
+   
+		   // 获取外层循环，superloops 是一个包含外层循环的容器superloops 是一个动态数组，存储了当前循环的所有外层循环。它按从最外层到最近外层的顺序排列，为循环嵌套关系的分析提供便利。
+		   if (!current_loop->superloops)
+			   break; // 没有外层循环，退出
+   
+		   // 获取第一个外层循环
+		   // current_loop = (*current_loop->superloops)[0];
+		   current_loop = current_loop->superloops->last();
+	   }
+   
+	   // 如果深度大于2，说明是多层嵌套循环
+	   return false;
+   }
+   
+   static tree
+   read_vector_array_self(vec_info *vinfo,
+						  stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
+						  tree scalar_dest, tree array, tree n)
+   {
+	   tree vect_type, vect, vect_name, array_ref;
+	   gimple *new_stmt;
+   
+	   gcc_assert(TREE_CODE(TREE_TYPE(array)) == ARRAY_TYPE);
+	   vect_type = TREE_TYPE(TREE_TYPE(array));
+	   vect = vect_create_destination_var(scalar_dest, vect_type);
+	   array_ref = build4(ARRAY_REF, vect_type, array, n, NULL_TREE, NULL_TREE);
+	   new_stmt = gimple_build_assign(vect, array_ref);
+	   vect_name = make_ssa_name(vect, new_stmt);
+	   gimple_assign_set_lhs(new_stmt, vect_name);
+	   vect_finish_stmt_generation(vinfo, stmt_info, new_stmt, gsi);
+   #ifdef ZHAOCW_20250329_TASK-SIMD
+	   if (flag_task_simd)
+		   STMT_VINFO_VEC_STMTS(stmt_info).safe_push(new_stmt);
+   #endif
+	   return vect_name;
+   }
+   
+   static void
+   init_vector_array_self(vec_info *vinfo, gimple *stmt0, gimple_stmt_iterator gsi, tree array, int n, tree vectype, tree base0)
+   {
+	   tree array_ref;
+	   gimple *new_stmt;
+	   gimple *stmt;
+   
+	   basic_block bb = gsi.bb;
+	   // stmt = gsi_stmt(gsi); // in[0]=0
+	   for (gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi))
+	   {
+		   gimple *stmt = gsi_stmt(gsi);
+		   // gimple stmt = gsi_stmt(gsi);
+   
+		   // 检查是否是 gimple_store 语句
+		   if (is_gimple_assign(stmt))
+		   {
+			   // 获取赋值语句的左侧和右侧
+			   tree lhs = gimple_assign_lhs(stmt);
+   
+			   // 检查左侧是否是数组访问
+			   if (TREE_CODE(lhs) == ARRAY_REF || TREE_CODE(lhs) == VAR_DECL)
+			   {
+				   // 确保数组的名字匹配
+				   tree base = TREE_OPERAND(lhs, 0); // 数组部分  in
+				   if (base == base0 || lhs == base0)
+				   {
+					   if (TREE_CODE(lhs) == VAR_DECL)
+					   {
+						   for (int j = 0; j < n; j++)
+						   {
+							   array_ref = build4(ARRAY_REF, vectype, array, build_int_cst(size_type_node, j), NULL_TREE, NULL_TREE);
+							   tree zero_value = build_zero_cst(vectype);			   // 创建一个零值的向量
+							   new_stmt = gimple_build_assign(array_ref, zero_value); // 将对应元素赋值为 0
+							   gsi_insert_after(&gsi, new_stmt, GSI_SAME_STMT);	   // 在当前语句后插入新语句
+   
+							   if (dump_enabled_p())
+								   dump_printf_loc(MSG_NOTE, vect_location, "add new stmt: %G", new_stmt);
+   
+							   if (stmt)
+							   {
+								   gimple_set_location(new_stmt, gimple_location(stmt));
+   
+								   // 如果可能抛出异常，确保它属于相同的异常处理区域
+								   int lp_nr = lookup_stmt_eh_lp(stmt);
+								   if (lp_nr != 0 && stmt_could_throw_p(cfun, new_stmt))
+									   add_stmt_to_eh_lp(new_stmt, lp_nr);
+							   }
+							   else
+								   gcc_assert(!stmt_could_throw_p(cfun, new_stmt));
+							   gsi_next(&gsi);
+						   }
+					   }
+					   else
+					   {
+						   // 这里是一个数组赋值语句，  in = in;
+						   tree rhs = gimple_assign_rhs1(stmt); // 0
+						   // array_ref = build4(ARRAY_REF, vectype, array, build_int_cst(size_type_node, i), NULL_TREE, NULL_TREE);
+						   array_ref = build4(ARRAY_REF, vectype, array, TREE_OPERAND(lhs, 1), NULL_TREE, NULL_TREE);
+						   // tree vop = vect_init_vector(vinfo, stmt_vinfo, op, vectype, NULL);
+						   tree vop = build_vector_from_val(vectype, rhs);
+						   new_stmt = gimple_build_assign(array_ref, vop);
+						   gsi_insert_after(&gsi, new_stmt, GSI_SAME_STMT);
+						   // vect_finish_stmt_generation_1(vinfo, stmt_info, new_stmt);
+						   if (dump_enabled_p())
+							   dump_printf_loc(MSG_NOTE, vect_location, "add new stmt: %G", new_stmt);
+   
+						   if (stmt)
+						   {
+							   gimple_set_location(new_stmt, gimple_location(stmt));
+   
+							   /* While EH edges will generally prevent vectorization, stmt might
+							  e.g. be in a must-not-throw region.  Ensure newly created stmts
+							  that could throw are part of the same region.  */
+							   int lp_nr = lookup_stmt_eh_lp(stmt);
+							   if (lp_nr != 0 && stmt_could_throw_p(cfun, new_stmt))
+								   add_stmt_to_eh_lp(new_stmt, lp_nr);
+						   }
+						   else
+							   gcc_assert(!stmt_could_throw_p(cfun, new_stmt));
+						   gsi_next(&gsi);
+					   }
+				   }
+			   }
+		   }
+	   }
+   
+	   // array_ref = build4(ARRAY_REF, TREE_TYPE(vect), array, n, NULL_TREE, NULL_TREE);
+   
+	   // new_stmt = gimple_build_assign(array_ref, vect);
+   
+	   // gsi_insert_before(&gsi, new_stmt, GSI_SAME_STMT);
+	   // vect_finish_stmt_generation(vinfo, stmt_info, new_stmt, gsi);
+	   // STMT_VINFO_VEC_STMTS(stmt_info).safe_push(new_stmt);
+   }
+   
+   static void
+   write_vector_array_self(vec_info *vinfo,
+						   stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
+						   tree vect, tree array, tree n)
+   {
+	   tree array_ref;
+	   gimple *new_stmt;
+   
+	   array_ref = build4(ARRAY_REF, TREE_TYPE(vect), array, n, NULL_TREE, NULL_TREE);
+   
+	   new_stmt = gimple_build_assign(array_ref, vect);
+   
+	   vect_finish_stmt_generation(vinfo, stmt_info, new_stmt, gsi);
+	   STMT_VINFO_VEC_STMTS(stmt_info).safe_push(new_stmt);
+   }
+   
+   // 在 Pass 中执行替换
+   
+   // static loop_p stmt_in_loop(gimple *stmt)
+   static unsigned int update_use_array_self(tree oragin_array, tree vect_array, gimple *stmt00)
+   {
+   
+	   struct loop *current_loop = stmt_in_loop(stmt00);
+	   if (current_loop->superloops && (*current_loop->superloops)[1])
+		   current_loop = (*current_loop->superloops)[1];
+	   // 获取当前函数
+	   function *fn = cfun;
+	   basic_block *bbs = get_loop_body(current_loop);
+	   gimple_stmt_iterator gsi;
+   
+	   for (unsigned int i = 0; i < current_loop->num_nodes; i++)
+	   {
+		   basic_block bb = bbs[i];
+		   for (gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi))
+		   {
+			   gimple *stmt = gsi_stmt(gsi);
+			   // gimple stmt = gsi_stmt(gsi);
+			   // if (!(gimple_code(stmt) == GIMPLE_OMP_FOR || gimple_code(stmt) == GIMPLE_OMP_SIMD))
+			   // 	continue;
+			   // 遍历语句的所有操作数（例如，数组元素的读取/写入）
+			   tree rhs = gimple_assign_rhs1(stmt);
+   
+			   if (rhs && TREE_CODE(rhs) == ARRAY_REF)
+			   {
+				   // tree op = gimple_op(stmt, i);
+   
+				   tree op = TREE_OPERAND(rhs, 0);
+   
+				   // 检查操作数是否为 SSA_NAME，即是否为变量（数组元素）
+				   if (op == oragin_array)
+				   {
+   
+					   // 替换操作数为 vin
+					   TREE_OPERAND(rhs, 0) = vect_array;
+   
+					   // return 1;
+					   // gimple_set_op(stmt, i, vect_array);
+				   }
+			   }
+			   gcall *call = dyn_cast<gcall *>(stmt);
+			   if (call)
+			   {
+				   for (unsigned i = 0; i < gimple_num_ops(stmt) - 3; i++)
+				   {
+   
+					   tree fun_arg = gimple_call_arg(stmt, i);
+					   if (fun_arg && ((TREE_CODE(fun_arg) == ARRAY_REF) || (TREE_CODE(fun_arg) == ADDR_EXPR)))
+					   {
+						   // tree op = gimple_op(stmt, i);
+   
+						   tree op = TREE_OPERAND(fun_arg, 0);
+   
+						   // 检查操作数是否为 SSA_NAME，即是否为变量（数组元素）v  if (TREE_CODE(TREE_OPERAND(op, 0)) == STRING_CST)
+						   if (op == oragin_array)
+						   {
+   
+							   // 替换操作数为 vin
+							   TREE_OPERAND(fun_arg, 0) = vect_array;
+						   }
+					   }
+				   }
+			   }
+		   }
+	   }
+   
+	   return 0;
+   }
+#endif
 
 static void
 write_vector_array (vec_info *vinfo,
@@ -1320,7 +1769,12 @@ vect_get_vec_defs_for_operand (vec_info *vinfo, stmt_vec_info stmt_vinfo,
   else
     {
       def_stmt_info = vect_stmt_to_vectorize (def_stmt_info);
+#ifdef ZHAOCW_20250329_TASK-SIMD
+		if (!flag_task_simd)
+			gcc_assert(STMT_VINFO_VEC_STMTS(def_stmt_info).length() == ncopies);
+#else
       gcc_assert (STMT_VINFO_VEC_STMTS (def_stmt_info).length () == ncopies);
+#endif
       for (unsigned i = 0; i < ncopies; ++i)
 	vec_oprnds->quick_push (gimple_get_lhs
 				  (STMT_VINFO_VEC_STMTS (def_stmt_info)[i]));
@@ -2564,6 +3018,9 @@ get_load_store_type (vec_info  *vinfo, stmt_vec_info stmt_info,
       int cmp = compare_step_with_zero (vinfo, stmt_info);
       if (cmp == 0)
 	{
+#ifdef ZHAOCW_20250329_TASK-SIMD
+		if (!flag_task_simd)
+#endif
 	  gcc_assert (vls_type == VLS_LOAD);
 	  *memory_access_type = VMAT_INVARIANT;
 	  /* Invariant accesses perform only component accesses, alignment
@@ -3461,6 +3918,376 @@ simple_integer_narrowing (tree vectype_out, tree vectype_in,
   return true;
 }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+
+void print_vect_get_vec_defs_for_operand(vec_info *vinfo, stmt_vec_info stmt_vinfo,
+										 unsigned ncopies,
+										 tree op, vec<tree> *vec_oprnds, tree vectype)
+{
+	gimple *def_stmt;
+	enum vect_def_type dt;
+	bool is_simple_use;
+	loop_vec_info loop_vinfo = dyn_cast<loop_vec_info>(vinfo);
+
+	if (dump_enabled_p())
+		dump_printf_loc(MSG_NOTE, vect_location,
+						"vect_get_vec_defs_for_operand: %T\n", op);
+
+	stmt_vec_info def_stmt_info;
+	is_simple_use = vect_is_simple_use(op, loop_vinfo, &dt,
+									   &def_stmt_info, &def_stmt);
+	gcc_assert(is_simple_use);
+	if (def_stmt && dump_enabled_p())
+		dump_printf_loc(MSG_NOTE, vect_location, "  def_stmt =  %G", def_stmt);
+
+	vec_oprnds->create(ncopies);
+
+	def_stmt_info = vect_stmt_to_vectorize(def_stmt_info);
+	// gcc_assert(STMT_VINFO_VEC_STMTS(def_stmt_info).length() == ncopies);
+	for (unsigned i = 0; i < ncopies; ++i)
+		vec_oprnds->quick_push(gimple_get_lhs(STMT_VINFO_VEC_STMTS(def_stmt_info)[i]));
+}
+
+void nested_loop_print_vect_get_vec_defs_for_operand(vec_info *vinfo, stmt_vec_info stmt_vinfo,
+													 unsigned ncopies,
+													 tree op, vec<tree> *vec_oprnds, tree vectype)
+{
+	gimple *def_stmt;
+	enum vect_def_type dt;
+	bool is_simple_use;
+	loop_vec_info loop_vinfo = dyn_cast<loop_vec_info>(vinfo);
+
+	if (dump_enabled_p())
+		dump_printf_loc(MSG_NOTE, vect_location,
+						"vect_get_vec_defs_for_operand: %T\n", op);
+
+	stmt_vec_info def_stmt_info;
+	is_simple_use = vect_is_simple_use(op, loop_vinfo, &dt,
+									   &def_stmt_info, &def_stmt);
+	gcc_assert(is_simple_use);
+	if (def_stmt && dump_enabled_p())
+		dump_printf_loc(MSG_NOTE, vect_location, "  def_stmt =  %G", def_stmt);
+
+	vec_oprnds->create(ncopies);
+
+	def_stmt_info = vect_stmt_to_vectorize(def_stmt_info);
+	// gcc_assert(STMT_VINFO_VEC_STMTS(def_stmt_info).length() == ncopies);
+	for (unsigned i = 0; i < ncopies; ++i)
+	{
+		// vec_oprnds->quick_push(gimple_get_lhs(STMT_VINFO_VEC_STMTS(def_stmt_info)[i]));
+		tree rhs = gimple_assign_rhs1(def_stmt_info->stmt); // 获取赋值语句的右值
+		// 将右值推入 vec_oprnds
+		vec_oprnds->quick_push(rhs);
+		int a = STMT_VINFO_VEC_STMTS(def_stmt_info).length();
+		for (unsigned j = 0; j < a; ++j)
+		{
+			gimple *stmt00 = STMT_VINFO_VEC_STMTS(def_stmt_info)[i];
+			if (stmt00)
+			{
+				gimple_stmt_iterator si = gsi_for_stmt(stmt00);
+				gsi_remove(&si, true);
+				release_defs(STMT_VINFO_VEC_STMTS(def_stmt_info)[i]); // delete vect_cst__67 = {_41, _41, _41, _41};
+			}
+		}
+		gimple_stmt_iterator si0 = gsi_for_stmt(def_stmt_info->stmt); //_41 = vect_array.12[k_55];
+		gsi_remove(&si0, true);
+		release_defs(def_stmt_info->stmt); // delete _41 = vect_array.12[k_55];
+	}
+}
+
+// 获取语句是否位于嵌套循环中
+static bool is_stmt_in_nested_loop(gimple *stmt)
+{
+
+	struct loop *current_loop = NULL;
+	current_loop = stmt_in_loop(stmt);
+	// 如果没有找到对应的循环，返回 false
+	if (!current_loop || current_loop->tasksimd == 1) //当前stmt在 标记循环中，说明是在
+		return false;
+
+	// 计算循环嵌套深度
+	unsigned depth = 0;
+	while (current_loop)
+	{
+		depth++; // 每向上一层，深度加1
+
+		// 获取外层循环，superloops 是一个包含外层循环的容器superloops 是一个动态数组，存储了当前循环的所有外层循环。它按从最外层到最近外层的顺序排列，为循环嵌套关系的分析提供便利。
+		if (!current_loop->superloops)
+			break; // 没有外层循环，退出
+
+		// 获取第一个外层循环
+		// current_loop = (*current_loop->superloops)[0];
+		current_loop = current_loop->superloops->last();
+	}
+
+	// 如果深度大于2，说明是多层嵌套循环
+	return depth > 2;
+}
+
+static bool vectorize_nested_loop_printf(vec_info *vinfo,
+										 stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
+										 gimple **vec_stmt, slp_tree slp_node,
+										 stmt_vector_for_cost *cost_vec)
+{
+	if (!vec_stmt)
+		return true;
+	tree vectypes[4] = {};
+	loop_vec_info loop_vinfo = dyn_cast<loop_vec_info>(vinfo);
+	poly_uint64 vf = LOOP_VINFO_VECT_FACTOR(loop_vinfo);
+	unsigned int const_vf = vf.to_constant();
+	tree scalar_dest;
+	size_t nargs;
+	tree op;
+	gcall *stmt;
+	tree fndecl, new_temp, rhs_type;
+	tree vec_oprnd;
+	stmt = dyn_cast<gcall *>(stmt_info->stmt);
+	fndecl = gimple_call_fndecl(stmt);
+	nargs = gimple_call_num_args(stmt);
+	unsigned int vect_nargs = nargs;
+	auto_vec<vec<tree>> vec_defs(nargs);
+
+	vec<tree> vec_oprnds = vNULL;
+	auto_vec<tree, 8> vargs;
+	vargs.safe_grow(vect_nargs, true);
+
+	scalar_dest = gimple_call_lhs(stmt);
+
+	struct loop *current_loop = stmt_in_loop(stmt);
+	// // 获取当前循环的迭代次数上界
+	widest_int upper_bound = current_loop->nb_iterations_upper_bound;
+	// tree num_iterations = current_loop->control_ivs->base;
+
+	const long int *i_bound = current_loop->bounds->bound.get_val();
+	int num_iterations = *i_bound;
+
+	// int upper_bound_value =upper_bound.val[0];
+	// // 修改循环的迭代次数上界
+	widest_int new_upper_bound = 1; // 设置新的上界为100
+	current_loop->nb_iterations_upper_bound = new_upper_bound;
+	current_loop->nb_iterations_likely_upper_bound = new_upper_bound;
+	current_loop->nb_iterations_estimate = new_upper_bound;
+	current_loop->bounds->bound = new_upper_bound;
+	// current_loop->control_ivs->base;
+	struct loop *current_loop2 = stmt_in_loop(stmt);
+	// 修改退出条件
+	if (current_loop->bounds && current_loop->bounds->is_exit)
+	{
+		// 获取当前退出条件语句
+		gcond *cond_stmt = as_a<gcond *>(current_loop->bounds->stmt);
+
+		// // 如果退出条件是 "ivtmp_57 != 0"，需要改成 "ivtmp_57 != 4"
+		// tree new_condition = build_ne (build_var_ref (current_loop->bounds->stmt), build_int_cst (TREE_TYPE (current_loop->bounds->stmt), 4));
+
+		// // 修改条件语句为新的条件
+		// gimple_set_cond (cond_stmt, new_condition);
+		tree rhs = gimple_cond_rhs(cond_stmt);
+		int rhs_value;
+		if (TREE_CODE(rhs) == INTEGER_CST)
+		{
+			// 获取整数常量的值
+			rhs_value = TREE_INT_CST_LOW(rhs);
+		}
+		// gimple_cond_set_rhs(cond_stmt, build_int_cst(NULL_TREE, rhs_value + TREE_INT_CST_LOW(num_iterations) + 1)); // build_int_cst(NULL_TREE, rhs_value + TREE_INT_CST_LOW(num_iterations) + 1 - const_vf));
+		gimple_cond_set_rhs(cond_stmt, build_int_cst(NULL_TREE, rhs_value - num_iterations + 1));
+		cond_stmt->subcode = GT_EXPR;
+		update_stmt(cond_stmt); // 更新条件语句
+	}
+
+	// 对于向量中的每个元素，生成标量函数调用
+	for (unsigned m = 0; m < const_vf; m++)
+	{
+		for (unsigned j = 0; j <= num_iterations; j++)
+		{
+			int varg = 0;
+			vec<tree> scalar_args;
+			scalar_args.create(nargs);
+
+			// tree scalar_args[4];
+			for (unsigned i = 0; i < nargs; i++)
+			{
+				op = gimple_call_arg(stmt, i);
+				if (TREE_CODE(op) == ADDR_EXPR)
+				{
+					// 获取地址表达式的操作数
+					if (TREE_CODE(TREE_OPERAND(op, 0)) == STRING_CST)
+					{
+						// 将标量参数添加到列表中
+						// scalar_args[varg++] = op;
+						scalar_args.safe_push(op);
+						//  scalar_args.quick_push(op);
+						continue;
+					}
+				}
+				if (j == 0 && m == 0)
+				{
+					vec_defs.quick_push(vNULL);
+
+					nested_loop_print_vect_get_vec_defs_for_operand(vinfo, stmt_info, 1, op, &vec_defs[i], vectypes[i]);
+				}
+				vec_oprnd = vec_defs[i][0]; // vin[k]
+
+				tree vec_array_oprnd = TREE_OPERAND(vec_oprnd, 0); // vin
+
+				tree k_oprnd = TREE_OPERAND(vec_oprnd, 1); // k
+
+				tree elem_type = TREE_TYPE(vec_oprnd);			//  in[k] 的类型  SI
+				tree vecarraytype = TREE_TYPE(vec_array_oprnd); // vin 的类型 v32si[28]
+				tree vecelem_type = TREE_TYPE(vecarraytype);	// vin 的元素类型 v32si
+				tree elem_size = TYPE_SIZE(elem_type);			// 32
+
+				tree array_size = TYPE_SIZE(vecarraytype);	 // 32*4*28  //32*vf*N
+				tree vecelem_size = TYPE_SIZE(vecelem_type); // 32*4  //32*vf
+				// tree vect_type = TREE_TYPE(vec_defs[i][0]);
+				// tree elem_type = TREE_TYPE(vect_type);
+				// tree size = TYPE_SIZE(elem_type);
+
+				// 计算提取第i个元素的偏移量
+				tree pos = fold_build2(MULT_EXPR, bitsizetype, bitsize_int(j), vecelem_size);
+				tree pos_re = fold_build2(MULT_EXPR, bitsizetype, bitsize_int(m), elem_size);
+				// tree pos_re = fold_build2(PLUS_EXPR, bitsizetype, pos, fold_build2(MULT_EXPR, bitsizetype, elem_size, TREE_INT_CST_LOW(k_oprnd)));
+				// 提取第i个标量元素
+				tree scalar_4arg = fold_build3(BIT_FIELD_REF, vecelem_type, vec_array_oprnd, vecelem_size, pos);
+
+				// tree temp_var = create_tmp_var(vecelem_type, "temp");
+				// gsi_insert_before(gsi, gimple_build_assign(temp_var, scalar_4arg), GSI_SAME_STMT);
+
+				// // 使用临时变量
+				// scalar_4arg = temp_var;
+				scalar_4arg = force_gimple_operand_gsi(gsi, scalar_4arg, true, NULL_TREE, true, GSI_SAME_STMT);
+
+				tree scalar_arg = fold_build3(BIT_FIELD_REF, elem_type, scalar_4arg, elem_size, pos_re);
+				// tree scalar_arg =build3(BIT_FIELD_REF, elem_type, vec_oprnd, size, pos);
+
+				scalar_arg = force_gimple_operand_gsi(gsi, scalar_arg, true, NULL_TREE, true, GSI_SAME_STMT);
+
+				scalar_args.safe_push(scalar_arg); // 生成函数的参数
+			}
+			gcall *call = gimple_build_call_vec(fndecl, scalar_args); // 传入函数参数和函数声明 生成函数调用
+			if (scalar_dest)
+			{
+				new_temp = make_ssa_name(scalar_dest, call);
+				gimple_call_set_lhs(call, new_temp);
+			}
+			gimple_call_set_nothrow(call, true);
+			vect_finish_stmt_generation(vinfo, stmt_info, call, gsi);
+		}
+	}
+	gimple *new_stmt;
+	if (scalar_dest)
+	{
+		tree type = TREE_TYPE(scalar_dest);
+		tree lhs = gimple_call_lhs(vect_orig_stmt(stmt_info)->stmt);
+		new_stmt = gimple_build_assign(lhs, build_zero_cst(type));
+	}
+	else
+		new_stmt = gimple_build_nop();
+	vinfo->replace_stmt(gsi, vect_orig_stmt(stmt_info), new_stmt);
+	unlink_stmt_vdef(stmt); // 更新 GIMPLE 中的 SSA 形式，将虚拟定义的使用传播到使用它的其它语句
+	vec_defs.release();
+	return true;
+}
+
+static bool vectorize_printf(vec_info *vinfo,
+							 stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
+							 gimple **vec_stmt, slp_tree slp_node,
+							 stmt_vector_for_cost *cost_vec)
+{
+	if (!vec_stmt)
+		return true;
+	tree vectypes[4] = {};
+	loop_vec_info loop_vinfo = dyn_cast<loop_vec_info>(vinfo);
+	poly_uint64 vf = LOOP_VINFO_VECT_FACTOR(loop_vinfo);
+	unsigned int const_vf = vf.to_constant();
+	tree scalar_dest;
+	size_t nargs;
+	tree op;
+	gcall *stmt;
+	tree fndecl, new_temp, rhs_type;
+	tree vec_oprnd;
+	stmt = dyn_cast<gcall *>(stmt_info->stmt);
+	fndecl = gimple_call_fndecl(stmt);
+	nargs = gimple_call_num_args(stmt);
+	unsigned int vect_nargs = nargs;
+	auto_vec<vec<tree>> vec_defs(nargs);
+	vec<tree> vec_oprnds = vNULL;
+	auto_vec<tree, 8> vargs;
+	vargs.safe_grow(vect_nargs, true);
+
+	scalar_dest = gimple_call_lhs(stmt);
+
+	// 对于向量中的每个元素，生成标量函数调用
+	for (unsigned j = 0; j < const_vf; j++)
+	{
+		int varg = 0;
+		vec<tree> scalar_args;
+		scalar_args.create(nargs);
+
+		// tree scalar_args[4];
+		for (unsigned i = 0; i < nargs; i++)
+		{
+			op = gimple_call_arg(stmt, i);
+			if (TREE_CODE(op) == ADDR_EXPR)
+			{
+				// 获取地址表达式的操作数
+				if (TREE_CODE(TREE_OPERAND(op, 0)) == STRING_CST)
+				{
+					// 将标量参数添加到列表中
+					// scalar_args[varg++] = op;
+					scalar_args.safe_push(op);
+					//  scalar_args.quick_push(op);
+					continue;
+				}
+			}
+			if (j == 0)
+			{
+				vec_defs.quick_push(vNULL);
+
+				print_vect_get_vec_defs_for_operand(vinfo, stmt_info, 1, op, &vec_defs[i], vectypes[i]);
+			}
+			vec_oprnd = vec_defs[i][0];
+
+			// vargs[varg++] = vec_defs[i][j];
+			tree vect_type = TREE_TYPE(vec_defs[i][0]);
+			tree elem_type = TREE_TYPE(vect_type);
+			tree size = TYPE_SIZE(elem_type);
+
+			// 计算提取第i个元素的偏移量
+			tree pos = fold_build2(MULT_EXPR, bitsizetype, bitsize_int(j), size);
+
+			// 提取第i个标量元素
+			tree scalar_arg = fold_build3(BIT_FIELD_REF, elem_type, vec_oprnd, size, pos);
+			// tree scalar_arg =build3(BIT_FIELD_REF, elem_type, vec_oprnd, size, pos);
+
+			scalar_arg = force_gimple_operand_gsi(gsi, scalar_arg, true, NULL_TREE, true, GSI_SAME_STMT);
+
+			scalar_args.safe_push(scalar_arg);
+		}
+		gcall *call = gimple_build_call_vec(fndecl, scalar_args);
+		if (scalar_dest)
+		{
+			new_temp = make_ssa_name(scalar_dest, call);
+			gimple_call_set_lhs(call, new_temp);
+		}
+		gimple_call_set_nothrow(call, true);
+		vect_finish_stmt_generation(vinfo, stmt_info, call, gsi);
+	}
+	gimple *new_stmt;
+	if (scalar_dest)
+	{
+		tree type = TREE_TYPE(scalar_dest);
+		tree lhs = gimple_call_lhs(vect_orig_stmt(stmt_info)->stmt);
+		new_stmt = gimple_build_assign(lhs, build_zero_cst(type));
+	}
+	else
+		new_stmt = gimple_build_nop();
+	vinfo->replace_stmt(gsi, vect_orig_stmt(stmt_info), new_stmt);
+	unlink_stmt_vdef(stmt);
+	return true;
+}
+
+#endif
+
 /* Function vectorizable_call.
 
    Check if STMT_INFO performs a function call that can be vectorized.
@@ -3510,6 +4337,30 @@ vectorizable_call (vec_info *vinfo,
   if (!stmt)
     return false;
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	if (flag_task_simd)
+	{
+		gcall *stmt = dyn_cast<gcall *>(stmt_info->stmt);
+		if (stmt)
+		{
+			tree fndecl = gimple_call_fndecl(stmt);
+			// 获取函数名
+			const char *func_name = IDENTIFIER_POINTER(DECL_NAME(fndecl));
+			// 比较函数名
+			if (strcmp(func_name, "printf") == 0)
+			{
+				// 判断 printf 是否位于多层循环中
+				if (is_stmt_in_nested_loop(stmt))
+				{
+					// return false; 如果在多层循环中，跳过向量化
+					return vectorize_nested_loop_printf(vinfo, stmt_info, gsi, vec_stmt, slp_node, cost_vec);
+				}
+
+				return vectorize_printf(vinfo, stmt_info, gsi, vec_stmt, slp_node, cost_vec);
+			}
+		}
+	}
+#endif
   if (gimple_call_internal_p (stmt)
       && (internal_load_fn_p (gimple_call_internal_fn (stmt))
 	  || internal_store_fn_p (gimple_call_internal_fn (stmt))))
@@ -4224,6 +5075,54 @@ vect_simd_lane_linear (tree op, class loop *loop,
     }
 }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+// 获取当前函数的控制流图并遍历所有基本块
+gimple_stmt_iterator traverse_function_bb_for_gsi(tree base0)
+{
+
+	// 获取当前函数
+	function *fn = cfun;
+	gimple_stmt_iterator gsi;
+	// 遍历函数所有基本块
+	basic_block bb;
+	FOR_EACH_BB_FN(bb, fn)
+	{
+		// 对每个基本块进行处理
+		// 进一步处理基本块中的 GIMPLE 语句
+		//   for (gimple_stmt_iterator gsi = gsi_start_bb (b); !gsi_end_p (gsi); gsi_next (&gsi))
+		for (gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi))
+		{
+			gimple *stmt = gsi_stmt(gsi);
+			// gimple stmt = gsi_stmt(gsi);
+
+			// 检查是否是 gimple_store 语句
+			if (is_gimple_assign(stmt))
+			{
+				// 获取赋值语句的左侧和右侧
+				tree lhs = gimple_assign_lhs(stmt);
+
+				// 检查左侧是否是数组访问
+				if (TREE_CODE(lhs) == ARRAY_REF || TREE_CODE(lhs) == VAR_DECL)
+				{
+					// 确保数组的名字匹配
+					tree base = TREE_OPERAND(lhs, 0); // 数组部分  in
+					if (base == base0 || lhs == base0)
+					{
+						// 这里是一个数组赋值语句，  in = in;
+						// return gsi;
+						// return gsi_last_bb(bb);
+						return gsi_start_bb(bb);
+					}
+				}
+			}
+		}
+	}
+	// 如果没有找到数组赋值，返回无效 gsi
+	return gsi;
+}
+
+#endif
+
 /* Function vectorizable_simd_clone_call.
 
    Check if STMT_INFO performs a function call that can be vectorized
@@ -4274,6 +5173,15 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
   if (fndecl == NULL_TREE)
     return false;
 
+#ifdef ZHAOCW_20250329_TASK-SIMD
+	// 获取函数名
+	const char *func_name = IDENTIFIER_POINTER(DECL_NAME(fndecl));
+	// 比较函数名
+	if (strcmp(func_name, "VFOOFOO") == 0)
+	{
+		return false;
+	}
+#endif
   struct cgraph_node *node = cgraph_node::get (fndecl);
   if (node == NULL || node->simd_clones == NULL)
     return false;
@@ -4324,6 +5232,62 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
       int op_no = i + masked_call_offset;
       if (slp_node)
 	op_no = vect_slp_child_index_for_operand (stmt, op_no, false);
+
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	tree optype;
+	if (vec_stmt && flag_task_simd && is_stmt_in_tasksimd_loop(stmt))
+	{
+		if (TREE_CODE(op) == ADDR_EXPR)
+			optype = TREE_TYPE(TREE_TYPE(TREE_OPERAND(op, 0)));
+		if (TREE_CODE(op) == ADDR_EXPR && optype && TREE_CODE(optype) != VECTOR_TYPE && flag_task_simd)
+		{
+
+			tree vectype_elem = get_vectype_for_scalar_type(vinfo, optype, slp_node);
+
+			int array_num = TREE_INT_CST_LOW(TYPE_SIZE(TREE_TYPE(TREE_OPERAND(op, 0)))) / TREE_INT_CST_LOW(TYPE_SIZE(optype));
+			/* Get an array into which we can store the individual vectors.  */
+			tree vec_array = create_vector_array(vectype_elem, array_num);
+
+			// // Extract the array index (rhs part of in[k])
+			// tree index = TREE_OPERAND(lhs, 1); // Array index is typically the first operand  k
+			gimple_stmt_iterator gsi_in = traverse_function_bb_for_gsi(TREE_OPERAND(op, 0));
+			// vect_clobber_variable(vinfo, stmt_info, &gsi_in, vec_array);
+			gimple *stmt_scalar = gsi_stmt(gsi_in);
+			// vect_clobber_variable(vinfo, stmt_info, &gsi_in, vec_array);
+
+			tree clobber = build_clobber(TREE_TYPE(vec_array));
+			gimple *new_stmt = gimple_build_assign(vec_array, clobber);
+			// vect_finish_stmt_generation(vinfo, stmt_info, new_stmt, gsi_in);
+			gsi_insert_after(&gsi_in, new_stmt, GSI_SAME_STMT); // 在当前语句后插入新语句
+
+			if (dump_enabled_p())
+				dump_printf_loc(MSG_NOTE, vect_location, "add new stmt: %G", new_stmt);
+
+			if (stmt_scalar)
+			{
+				gimple_set_location(new_stmt, gimple_location(stmt_scalar));
+
+				// 如果可能抛出异常，确保它属于相同的异常处理区域
+				int lp_nr = lookup_stmt_eh_lp(stmt_scalar);
+				if (lp_nr != 0 && stmt_could_throw_p(cfun, new_stmt))
+					add_stmt_to_eh_lp(new_stmt, lp_nr);
+			}
+			else
+				gcc_assert(!stmt_could_throw_p(cfun, new_stmt));
+
+			init_vector_array_self(vinfo, stmt_scalar, gsi_in, vec_array, array_num, vectype_elem, TREE_OPERAND(op, 0)); // vin[k]={in[k], in[k], in[k], in[k]}
+																														 // write_vector_array_self(vinfo, stmt_info, gsi, vec_oprnd, vec_array, index);						   // vin[k]=vi*vk
+			// tree vec_array_ptr = build_reference_type(vec_array);																								  // update_use_array_self(TREE_OPERAND(lhs, 0), vec_array, stmt_info->stmt);
+			// gimple_call_set_arg(stmt, i, vec_array_ptr);															  // 直接放向量化数组不是放的引用
+
+			// tree *vec_array_ptr = &vec_array;// 直接将 vec_array 作为指针传递
+			update_use_array_self(TREE_OPERAND(op, 0), vec_array, stmt);
+			TREE_OPERAND(op, 0) = vec_array;
+			op = gimple_call_arg(stmt, i);
+		}
+	}
+#endif
+
       if (!vect_is_simple_use (vinfo, stmt_info, slp_node,
 			       op_no, &op, &slp_op[i],
 			       &thisarginfo.dt, &thisarginfo.vectype)
@@ -4760,6 +5724,61 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
 	  unsigned int k, l, m, o;
 	  tree atype;
 	  op = gimple_call_arg (stmt, i + masked_call_offset);
+	  
+#ifndef ZHAOCW_20250329_TASK-SIMD
+
+if (TREE_CODE(op) == ADDR_EXPR && flag_task_simd && is_stmt_in_tasksimd_loop(stmt))
+{
+	tree optype;
+	if (TREE_CODE(op) == ADDR_EXPR)
+		optype = TREE_TYPE(TREE_TYPE(TREE_OPERAND(op, 0)));
+	if (optype && TREE_CODE(optype) != VECTOR_TYPE)
+	{
+		tree vectype_elem = get_vectype_for_scalar_type(vinfo, optype, slp_node);
+
+		int array_num = TREE_INT_CST_LOW(TYPE_SIZE(TREE_TYPE(TREE_OPERAND(op, 0)))) / TREE_INT_CST_LOW(TYPE_SIZE(optype));
+		/* Get an array into which we can store the individual vectors.  */
+		tree vec_array = create_vector_array(vectype_elem, array_num);
+
+		// // Extract the array index (rhs part of in[k])
+		// tree index = TREE_OPERAND(lhs, 1); // Array index is typically the first operand  k
+		gimple_stmt_iterator gsi_in = traverse_function_bb_for_gsi(TREE_OPERAND(op, 0));
+		// vect_clobber_variable(vinfo, stmt_info, &gsi_in, vec_array);
+		gimple *stmt_scalar = gsi_stmt(gsi_in);
+		// vect_clobber_variable(vinfo, stmt_info, &gsi_in, vec_array);
+
+		tree clobber = build_clobber(TREE_TYPE(vec_array));
+		gimple *new_stmt = gimple_build_assign(vec_array, clobber);
+		// vect_finish_stmt_generation(vinfo, stmt_info, new_stmt, gsi_in);
+		gsi_insert_after(&gsi_in, new_stmt, GSI_SAME_STMT); // 在当前语句后插入新语句
+
+		if (dump_enabled_p())
+			dump_printf_loc(MSG_NOTE, vect_location, "add new stmt: %G", new_stmt);
+
+		if (stmt_scalar)
+		{
+			gimple_set_location(new_stmt, gimple_location(stmt_scalar));
+
+			// 如果可能抛出异常，确保它属于相同的异常处理区域
+			int lp_nr = lookup_stmt_eh_lp(stmt_scalar);
+			if (lp_nr != 0 && stmt_could_throw_p(cfun, new_stmt))
+				add_stmt_to_eh_lp(new_stmt, lp_nr);
+		}
+		else
+			gcc_assert(!stmt_could_throw_p(cfun, new_stmt));
+
+		init_vector_array_self(vinfo, stmt_scalar, gsi_in, vec_array, array_num, vectype_elem, TREE_OPERAND(op, 0)); // vin[k]={in[k], in[k], in[k], in[k]}
+																													 // write_vector_array_self(vinfo, stmt_info, gsi, vec_oprnd, vec_array, index);						   // vin[k]=vi*vk
+		// tree vec_array_ptr = build_reference_type(vec_array);																								  // update_use_array_self(TREE_OPERAND(lhs, 0), vec_array, stmt_info->stmt);
+		// gimple_call_set_arg(stmt, i, vec_array_ptr);															  // 直接放向量化数组不是放的引用
+
+		// tree *vec_array_ptr = &vec_array;// 直接将 vec_array 作为指针传递
+		update_use_array_self(TREE_OPERAND(op, 0), vec_array, stmt);
+		TREE_OPERAND(op, 0) = vec_array;
+		op = gimple_call_arg(stmt, i);
+	}
+}
+#endif
 	  switch (bestn->simdclone->args[i].arg_type)
 	    {
 	    case SIMD_CLONE_ARG_TYPE_VECTOR:
@@ -9271,8 +10290,23 @@ vectorizable_store (vec_info *vinfo,
 	      continue;
 	    }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+		tree lhs;
+		int array_num;
+		tree vec_array;
+		if (flag_task_simd)
+		{
+			lhs = gimple_assign_lhs(stmt_info->stmt);
+			array_num = TREE_INT_CST_LOW(TYPE_SIZE(TREE_TYPE(TREE_OPERAND(lhs, 0)))) / TREE_INT_CST_LOW(TYPE_SIZE(TREE_TYPE(lhs)));
+			/* Get an array into which we can store the individual vectors.  */
+			vec_array = create_vector_array(vectype, array_num);
+		}
+		else
+			vec_array = create_vector_array(vectype, group_size);
+#else
 	  /* Get an array into which we can store the individual vectors.  */
 	  tree vec_array = create_vector_array (vectype, group_size);
+#endif
 
 	  /* Invalidate the current contents of VEC_ARRAY.  This should
 	     become an RTL clobber too, which prevents the vector registers
@@ -9293,8 +10327,22 @@ vectorizable_store (vec_info *vinfo,
 		}
 	      else
 		vec_oprnd = dr_chain[i];
+#ifndef ZHAOCW_20250329_TASK-SIMD
+		if (flag_task_simd && TREE_CODE(lhs) == ARRAY_REF)
+		{
+			// Extract the array index (rhs part of in[k])
+			tree index = TREE_OPERAND(lhs, 1); // Array index is typically the first operand  k
+			gimple_stmt_iterator gsi_in = traverse_function_bb_for_gsi(TREE_OPERAND(lhs, 0));
+			init_vector_array_self(vinfo, stmt_info->stmt, gsi_in, vec_array, array_num, vectype, TREE_OPERAND(lhs, 0)); // vin[k]={in[k], in[k], in[k], in[k]}
+			write_vector_array_self(vinfo, stmt_info, gsi, vec_oprnd, vec_array, index);								 // vin[k]=vi*vk
+			update_use_array_self(TREE_OPERAND(lhs, 0), vec_array, stmt_info->stmt);
+		}
+		else
+			write_vector_array(vinfo, stmt_info, gsi, vec_oprnd, vec_array, i);
+#else
 	      write_vector_array (vinfo, stmt_info, gsi, vec_oprnd, vec_array,
 				  i);
+#endif
 	    }
 
 	  tree final_mask = NULL;
@@ -9306,7 +10354,38 @@ vectorizable_store (vec_info *vinfo,
 	  if (vec_mask)
 	    final_mask = prepare_vec_mask (loop_vinfo, mask_vectype, final_mask,
 					   vec_mask, gsi);
+#ifndef ZHAOCW_20250329_TASK-SIMD
+			if (!flag_task_simd)
+			{
+				gcall *call;
+				if (final_mask)
+				{
+					/* Emit:
+					 MASK_STORE_LANES (DATAREF_PTR, ALIAS_PTR, VEC_MASK,
+							   VEC_ARRAY).  */
+					unsigned int align = TYPE_ALIGN(TREE_TYPE(vectype));
+					tree alias_ptr = build_int_cst(ref_type, align);
+					call = gimple_build_call_internal(IFN_MASK_STORE_LANES, 4,
+													  dataref_ptr, alias_ptr,
+													  final_mask, vec_array);
+				}
+				else
+				{
+					/* Emit:
+					 MEM_REF[...all elements...] = STORE_LANES (VEC_ARRAY).  */
+					data_ref = create_array_ref(aggr_type, dataref_ptr, ref_type);
+					call = gimple_build_call_internal(IFN_STORE_LANES, 1,
+													  vec_array);
+					gimple_call_set_lhs(call, data_ref);
+				}
+				gimple_call_set_nothrow(call, true);
+				vect_finish_stmt_generation(vinfo, stmt_info, call, gsi);
+				new_stmt = call;
 
+				/* Record that VEC_ARRAY is now dead.  */
+				vect_clobber_variable(vinfo, stmt_info, gsi, vec_array);
+			}
+#endif
 	  if (lanes_ifn == IFN_MASK_LEN_STORE_LANES)
 	    {
 	      if (loop_lens)
@@ -10658,6 +11737,88 @@ vectorizable_load (vec_info *vinfo,
 
   dr_vec_info *dr_info = STMT_VINFO_DR_INFO (stmt_info), *first_dr_info = NULL;
   ensure_base_align (dr_info);
+
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd 
+	&& is_stmt_in_nested_loop(stmt_info->stmt) 
+	&& is_stmt_in_tasksimd_loop(stmt_info->stmt))
+  {
+	  gimple *new_stmt0 = NULL;
+	  tree rhs = gimple_assign_rhs1(stmt_info->stmt);
+	  tree optype = TREE_TYPE(TREE_TYPE(TREE_OPERAND(rhs, 0)));
+	  if (optype && TREE_CODE(optype) != VECTOR_TYPE)
+	  {
+		  tree vec_array;
+
+		  dr_chain.create(group_size);
+		  int array_num;
+		  if (flag_task_simd)
+		  {
+
+			  array_num = TREE_INT_CST_LOW(TYPE_SIZE(TREE_TYPE(TREE_OPERAND(rhs, 0)))) / TREE_INT_CST_LOW(TYPE_SIZE(TREE_TYPE(rhs)));
+			  /* Get an array into which we can store the individual vectors.  */
+			  vec_array = create_vector_array(vectype, array_num);
+		  }
+		  else
+			  vec_array = create_vector_array(vectype, group_size);
+
+		  tree final_mask = NULL_TREE;
+
+		  if (!flag_task_simd)
+		  {
+			  gcall *call;
+			  if (final_mask)
+			  {
+				  /* Emit:
+				   VEC_ARRAY = MASK_LOAD_LANES (DATAREF_PTR, ALIAS_PTR,
+												VEC_MASK).  */
+				  unsigned int align = TYPE_ALIGN(TREE_TYPE(vectype));
+				  tree alias_ptr = build_int_cst(ref_type, align);
+				  call = gimple_build_call_internal(IFN_MASK_LOAD_LANES, 3,
+													dataref_ptr, alias_ptr,
+													final_mask);
+			  }
+			  else
+			  {
+				  /* Emit:
+				   VEC_ARRAY = LOAD_LANES (MEM_REF[...all elements...]).  */
+				  data_ref = create_array_ref(aggr_type, dataref_ptr, ref_type);
+				  call = gimple_build_call_internal(IFN_LOAD_LANES, 1, data_ref);
+			  }
+			  gimple_call_set_lhs(call, vec_array);
+			  gimple_call_set_nothrow(call, true);
+			  vect_finish_stmt_generation(vinfo, stmt_info, call, gsi);
+			  new_stmt0 = call;
+		  }
+
+		  /* Extract each vector into an SSA_NAME.  */
+		  for (i = 0; i < group_size; i++)
+		  {
+
+			  if (flag_task_simd && TREE_CODE(rhs) == ARRAY_REF)
+			  {
+				  // Extract the array index (rhs part of in[k])
+				  tree index = TREE_OPERAND(rhs, 1); // Array index is typically the first operand  k
+				  gimple_stmt_iterator gsi_in = traverse_function_bb_for_gsi(TREE_OPERAND(rhs, 0));
+				  init_vector_array_self(vinfo, stmt_info->stmt, gsi_in, vec_array, array_num, vectype, TREE_OPERAND(rhs, 0)); // vin[k]={in[k], in[k], in[k], in[k]}
+				  new_temp = read_vector_array_self(vinfo, stmt_info, gsi, scalar_dest, vec_array, index);					 //_44 = in[k_54];
+				  update_use_array_self(TREE_OPERAND(rhs, 0), vec_array, stmt_info->stmt);
+
+				  // update_use_array_self(TREE_OPERAND(rhs, 0), vec_array, stmt_info->stmt);
+			  }
+			  else
+				  new_temp = read_vector_array(vinfo, stmt_info, gsi, scalar_dest, vec_array, i);
+
+			  dr_chain.quick_push(new_temp);
+		  }
+
+		  /* Record the mapping between SSA_NAMEs and statements.  */
+		  vect_record_grouped_load_vectors(vinfo, stmt_info, dr_chain);
+		  if (!flag_task_simd)
+			  vect_clobber_variable(vinfo, stmt_info, gsi, vec_array);
+	  }
+  }
+#endif
 
   if (memory_access_type == VMAT_INVARIANT)
     {
@@ -14228,6 +15389,26 @@ vect_transform_stmt (vec_info *vinfo,
       break;
 
     default:
+#ifndef ZHAOCW_20250329_TASK-SIMD
+		if (flag_task_simd && is_stmt_in_tasksimd_loop(stmt_info->stmt))
+		{
+			gcall *stmt = dyn_cast<gcall *>(stmt_info->stmt);
+			if (stmt)
+			{
+				tree fndecl = gimple_call_fndecl(stmt);
+				// 获取函数名
+				const char *func_name = IDENTIFIER_POINTER(DECL_NAME(fndecl));
+				// 比较函数名
+				if (strcmp(func_name, "printf") == 0)
+				{
+					done = vectorizable_call(vinfo, stmt_info,
+											 gsi, &vec_stmt, slp_node, NULL);
+					gcc_assert(done);
+					break;
+				}
+			}
+		}
+#endif
       if (!STMT_VINFO_LIVE_P (stmt_info))
 	{
 	  if (dump_enabled_p ())

@@ -882,6 +882,10 @@ public:
 unsigned int
 pass_dominator::execute (function *fun)
 {
+#ifdef ZHAOCW_20250329_TASK-SIMD
+	if (flag_task_simd)
+		return 1;
+#endif
   memset (&opt_stats, 0, sizeof (opt_stats));
 
   /* Create our hash tables.  */

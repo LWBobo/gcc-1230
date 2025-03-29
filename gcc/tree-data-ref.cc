@@ -5900,7 +5900,12 @@ get_references_in_stmt (gimple *stmt, vec<data_ref_loc, va_heap> *references)
       else if (gimple_call_builtin_p (stmt, BUILT_IN_PREFETCH))
 	clobbers_memory = false;
       else
+#ifndef ZHAOCW_20250329_TASK-SIMD
+        if (!flag_task_vect)
+          clobbers_memory = true;
+#else
 	clobbers_memory = true;
+#endif
     }
   else if (stmt_code == GIMPLE_ASM
 	   && (gimple_asm_volatile_p (as_a <gasm *> (stmt))

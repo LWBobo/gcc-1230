@@ -2206,6 +2206,10 @@ c_omp_split_clauses (location_t loc, enum tree_code code,
 	    OMP_CLAUSE_SCHEDULE_SIMD (clauses) = 0;
 	  break;
 	case OMP_CLAUSE_SAFELEN:
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	case OMP_CLAUSE_TILESIMD:
+	case OMP_CLAUSE_TASKSIMD:
+#endif
 	case OMP_CLAUSE_SIMDLEN:
 	case OMP_CLAUSE_ALIGNED:
 	case OMP_CLAUSE_NONTEMPORAL:
