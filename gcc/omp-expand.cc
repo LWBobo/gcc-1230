@@ -6448,6 +6448,282 @@ expand_omp_for_static_chunk (struct omp_region *region,
     }
 }
 
+/* For ccc sbuf/dbuf, liyanbing 20180502. */
+// #ifdef CCC
+#ifndef ZHAOCW_20250329_TASK-SIMD
+/* A subroutine of expand_omp_for. Generate code for a loop with
+   Parallel C  sbuf/dbuf directive. The main work is to do loop tile.
+   Given parameters:
+
+		 #pragma ccc sbuf dma(a)/rma(a)/sdma(a) ldm_size(ldmsize) sldm_size(sldmsize)
+		 for (V = N1; V < N2; V += 1) BODY;
+
+	where COND is "<", and STEP is 1, we generate pseudocode:
+
+		trip = 0;
+		CHUNK = ccc_cal_chunk(ldm_ptr, ldmsize, sldm_ptr, sldmsize, index);
+	L0:
+		s0 = trip * CHUNK;
+		e0 = min(s0 + CHUNK, n);
+		if (s0 < n) goto L1; else goto L4;
+	L1:
+		V = s0 * STEP + N1;
+		e = e0 * STEP + N1;
+	L2:
+		BODY;
+		V += STEP;
+		if (V cond e) goto L2; else goto L3;
+	L3:
+		trip += 1;
+		goto L0;
+	L4:
+
+	CHUNK is calculated according to SIZE.
+*/
+
+static void
+expand_ccc_loop_dma(struct omp_region *region,
+					struct omp_for_data *fd, gimple *inner_stmt)
+{
+	tree n, s0, e0, e, t;
+	tree trip_var, trip_init, trip_main, trip_back, clauses;
+	tree type, itype, vmain, vback, vextra;
+	basic_block entry_bb, exit_bb, body_bb, seq_start_bb, iter_part_bb;
+	basic_block trip_update_bb = NULL, cont_bb, fin_bb;
+	gimple_stmt_iterator gsi;
+	edge se;
+	bool broken_loop = region->cont == NULL;
+	tree *counts = NULL;
+	tree n1, n2, step;
+	int ldmsize = 0, sldmsize = 0, unitsize = 0, tilesimd = 0;
+	int num_dma = 0;
+	tree ldm_ptr, sldm_ptr;
+	bool have_sdma = false, have_dma = false, have_rma = false;
+	int opt_kind;
+	location_t loc = 0;
+
+	gcc_checking_assert((gimple_omp_for_kind(fd->for_stmt) != GF_OMP_FOR_KIND_OACC_LOOP) || !inner_stmt);
+
+	if (int_cst_value(fd->loop.step) != 1)
+		error("The step of sbuf loop must be 1 .");
+
+	if (fd->loop.cond_code != LT_EXPR)
+		error("The condition of sbuf loop must be < or <= .");
+
+	// Get tilesimd
+	clauses = omp_find_clause(gimple_omp_for_clauses(fd->for_stmt), OMP_CLAUSE_TILESIMD);
+	if (clauses)
+	{
+		clauses = OMP_CLAUSE_TILESIMD_EXPR(clauses);
+		tilesimd = int_cst_value(clauses);
+	}
+
+	itype = type = TREE_TYPE(fd->loop.v);
+	if (POINTER_TYPE_P(type))
+		itype = signed_type_for(type);
+
+	/* Generate necessary bb. */
+	entry_bb = region->entry;
+	se = split_block(entry_bb, last_stmt(entry_bb));
+	entry_bb = se->src;
+	iter_part_bb = se->dest;
+	cont_bb = region->cont;
+	gcc_assert(EDGE_COUNT(iter_part_bb->succs) == 2);
+	fin_bb = BRANCH_EDGE(iter_part_bb)->dest;
+	gcc_assert(broken_loop || fin_bb == FALLTHRU_EDGE(cont_bb)->dest);
+	seq_start_bb = split_edge(FALLTHRU_EDGE(iter_part_bb));
+	body_bb = single_succ(seq_start_bb);
+
+	gcc_assert(BRANCH_EDGE(cont_bb)->dest == body_bb);
+	gcc_assert(EDGE_COUNT(cont_bb->succs) == 2);
+	trip_update_bb = split_edge(FALLTHRU_EDGE(cont_bb));
+	exit_bb = region->exit;
+
+	/* Trip and adjustment setup goes in ENTRY_BB.  */
+	gsi = gsi_last_bb(entry_bb);
+	gcc_assert(gimple_code(gsi_stmt(gsi)) == GIMPLE_OMP_FOR);
+
+	t = fold_binary(fd->loop.cond_code, boolean_type_node,
+					fold_convert(type, fd->loop.n1),
+					fold_convert(type, fd->loop.n2));
+
+	n1 = fd->loop.n1;
+	n2 = fd->loop.n2;
+	step = fd->loop.step;
+
+	n1 = force_gimple_operand_gsi(&gsi, fold_convert(type, n1),
+								  true, NULL_TREE, true, GSI_SAME_STMT);
+	n2 = force_gimple_operand_gsi(&gsi, fold_convert(itype, n2),
+								  true, NULL_TREE, true, GSI_SAME_STMT);
+	step = force_gimple_operand_gsi(&gsi, fold_convert(itype, step),
+									true, NULL_TREE, true, GSI_SAME_STMT);
+
+	t = build_int_cst(itype, (fd->loop.cond_code == LT_EXPR ? -1 : 1));
+	t = fold_build2(PLUS_EXPR, itype, step, t);
+	t = fold_build2(PLUS_EXPR, itype, t, n2);
+	t = fold_build2(MINUS_EXPR, itype, t, fold_convert(itype, n1));
+	if (TYPE_UNSIGNED(itype) && fd->loop.cond_code == GT_EXPR)
+		t = fold_build2(TRUNC_DIV_EXPR, itype,
+						fold_build1(NEGATE_EXPR, itype, t),
+						fold_build1(NEGATE_EXPR, itype, step));
+	else
+		t = fold_build2(TRUNC_DIV_EXPR, itype, t, step);
+	t = fold_convert(itype, t);
+	n = force_gimple_operand_gsi(&gsi, t, true, NULL_TREE,
+								 true, GSI_SAME_STMT);
+
+	trip_var = create_tmp_reg(itype, ".trip");
+	trip_init = trip_var;
+	trip_main = trip_var;
+	trip_back = trip_var;
+
+	gassign *assign_stmt = gimple_build_assign(trip_init, build_int_cst(itype, 0));
+	gsi_insert_before(&gsi, assign_stmt, GSI_SAME_STMT);
+
+	/* Expr the chunk of a call of ccc_cal_chunk (ldm_ptr, ldmsize, sldm_ptr, sldm_size, index).
+	   LDM_PTR is ldm buf address from ldm clause, NULL if there is no ldm clause;
+	   LDMSIZE is the size of ldm buf from ldm_size clause;
+	   SLDM_PTR is shared ldm buf address from sldm clause;
+	   SLDMSIZE is the size of shared ldm buf from sldm_size clause;
+	   INDEX is number. */
+	tree chunk = create_tmp_var(integer_type_node, ".chunk");
+	TREE_THIS_VOLATILE(chunk) = 1;
+
+	t = build_int_cst(integer_type_node, tilesimd),
+	assign_stmt = gimple_build_assign(chunk, t);
+	gsi_insert_before(&gsi, assign_stmt, GSI_SAME_STMT);
+
+	fd->chunk_size = chunk;
+	t = fold_build2(MULT_EXPR, itype, fd->chunk_size, step);
+
+	if (POINTER_TYPE_P(type))
+		t = fold_build_pointer_plus(n1, t);
+	else
+		t = fold_build2(PLUS_EXPR, type, t, n1);
+	vextra = force_gimple_operand_gsi(&gsi, t, true, NULL_TREE,
+									  true, GSI_SAME_STMT);
+
+	/* Remove the GIMPLE_OMP_FOR.  */
+	gsi_remove(&gsi, true);
+
+	/* Iteration space partitioning goes in ITER_PART_BB.  */
+	gsi = gsi_last_bb(iter_part_bb);
+
+	t = fold_build2(MULT_EXPR, itype, trip_main, fd->chunk_size);
+	s0 = force_gimple_operand_gsi(&gsi, t, true, NULL_TREE,
+								  false, GSI_CONTINUE_LINKING);
+
+	t = fold_build2(PLUS_EXPR, itype, s0, fd->chunk_size);
+	t = fold_build2(MIN_EXPR, itype, t, n);
+	e0 = force_gimple_operand_gsi(&gsi, t, true, NULL_TREE,
+								  false, GSI_CONTINUE_LINKING);
+
+	t = build2(LT_EXPR, boolean_type_node, s0, n);
+	gsi_insert_after(&gsi, gimple_build_cond_empty(t), GSI_CONTINUE_LINKING);
+
+	gsi = gsi_start_bb(seq_start_bb);
+
+	tree startvar = fd->loop.v;
+
+	t = fold_convert(itype, s0);
+	t = fold_build2(MULT_EXPR, itype, t, step);
+	if (POINTER_TYPE_P(type))
+		t = fold_build_pointer_plus(n1, t);
+	else
+		t = fold_build2(PLUS_EXPR, type, t, n1);
+	t = fold_convert(TREE_TYPE(startvar), t);
+	t = force_gimple_operand_gsi(&gsi, t,
+								 DECL_P(startvar) && TREE_ADDRESSABLE(startvar),
+								 NULL_TREE, false, GSI_CONTINUE_LINKING);
+	assign_stmt = gimple_build_assign(startvar, t);
+	gsi_insert_after(&gsi, assign_stmt, GSI_CONTINUE_LINKING);
+
+	/* Trip and adjustment setup goes in ENTRY_BB.  */
+	t = fold_convert(itype, e0);
+	t = fold_build2(MULT_EXPR, itype, t, step);
+	if (POINTER_TYPE_P(type))
+		t = fold_build_pointer_plus(n1, t);
+	else
+		t = fold_build2(PLUS_EXPR, type, t, n1);
+	t = fold_convert(TREE_TYPE(startvar), t);
+	e = force_gimple_operand_gsi(&gsi, t, true, NULL_TREE,
+								 false, GSI_CONTINUE_LINKING);
+
+	/* The code controlling the sequential loop goes in CONT_BB,
+	   replacing the GIMPLE_OMP_CONTINUE.  */
+	gsi = gsi_last_bb(cont_bb);
+	gomp_continue *cont_stmt = as_a<gomp_continue *>(gsi_stmt(gsi));
+	vmain = gimple_omp_continue_control_use(cont_stmt);
+	vback = gimple_omp_continue_control_def(cont_stmt);
+
+	if (!gimple_omp_for_combined_p(fd->for_stmt))
+	{
+		if (POINTER_TYPE_P(type))
+			t = fold_build_pointer_plus(vmain, step);
+		else
+			t = fold_build2(PLUS_EXPR, type, vmain, step);
+		if (DECL_P(vback) && TREE_ADDRESSABLE(vback))
+			t = force_gimple_operand_gsi(&gsi, t, true, NULL_TREE,
+										 true, GSI_SAME_STMT);
+		assign_stmt = gimple_build_assign(vback, t);
+		gsi_insert_before(&gsi, assign_stmt, GSI_SAME_STMT);
+
+		t = build2(fd->loop.cond_code, boolean_type_node,
+				   DECL_P(vback) && TREE_ADDRESSABLE(vback)
+					   ? t
+					   : vback,
+				   e);
+		gsi_insert_before(&gsi, gimple_build_cond_empty(t), GSI_SAME_STMT);
+	}
+
+	/* Remove GIMPLE_OMP_CONTINUE.  */
+	gsi_remove(&gsi, true);
+
+	/* Trip update code goes into TRIP_UPDATE_BB.  */
+	gsi = gsi_start_bb(trip_update_bb);
+
+	t = build_int_cst(itype, 1);
+	t = build2(PLUS_EXPR, itype, trip_main, t);
+	assign_stmt = gimple_build_assign(trip_back, t);
+	gsi_insert_after(&gsi, assign_stmt, GSI_CONTINUE_LINKING);
+
+	/* Remove the GIMPLE_OMP_RETURN.  */
+	gsi = gsi_last_bb(exit_bb);
+	gsi_remove(&gsi, true);
+
+	/* Connect the new blocks.  */
+	find_edge(iter_part_bb, seq_start_bb)->flags = EDGE_TRUE_VALUE;
+	find_edge(iter_part_bb, fin_bb)->flags = EDGE_FALSE_VALUE;
+
+	se = find_edge(cont_bb, body_bb);
+	se->flags = EDGE_TRUE_VALUE;
+
+	find_edge(cont_bb, trip_update_bb)->flags = se ? EDGE_FALSE_VALUE : EDGE_FALLTHRU;
+
+	redirect_edge_and_branch(single_succ_edge(trip_update_bb), iter_part_bb);
+
+	set_immediate_dominator(CDI_DOMINATORS, trip_update_bb, cont_bb);
+	set_immediate_dominator(CDI_DOMINATORS, iter_part_bb,
+							recompute_dominator(CDI_DOMINATORS, iter_part_bb));
+	set_immediate_dominator(CDI_DOMINATORS, fin_bb,
+							recompute_dominator(CDI_DOMINATORS, fin_bb));
+	set_immediate_dominator(CDI_DOMINATORS, seq_start_bb,
+							recompute_dominator(CDI_DOMINATORS, seq_start_bb));
+	set_immediate_dominator(CDI_DOMINATORS, body_bb,
+							recompute_dominator(CDI_DOMINATORS, body_bb));
+
+	struct loop *trip_loop = alloc_loop();
+	trip_loop->header = iter_part_bb;
+	trip_loop->latch = trip_update_bb;
+	add_loop(trip_loop, iter_part_bb->loop_father);
+
+	struct loop *loop = alloc_loop();
+	loop->header = body_bb;
+	loop->latch = cont_bb;
+	add_loop(loop, trip_loop);
+}
+#endif
+
 /* A subroutine of expand_omp_for.  Generate code for a simd non-worksharing
    loop.  Given parameters:
 
@@ -6489,6 +6765,20 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
 			      OMP_CLAUSE_IF);
   tree simdlen = omp_find_clause (gimple_omp_for_clauses (fd->for_stmt),
 				  OMP_CLAUSE_SIMDLEN);
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	int tasksimd_int = INT_MAX;
+	tree tasksimd = omp_find_clause(gimple_omp_for_clauses(fd->for_stmt),
+									OMP_CLAUSE_TASKSIMD);
+	if (tasksimd)
+	{
+		poly_uint64 val;
+		tasksimd = OMP_CLAUSE_TASKSIMD_EXPR(tasksimd);
+		if (!poly_int_tree_p(tasksimd, &val))
+			tasksimd_int = 0;
+		else
+			tasksimd_int = MIN(constant_lower_bound(val), INT_MAX);
+	}
+#endif
   tree condtemp = omp_find_clause (gimple_omp_for_clauses (fd->for_stmt),
 				   OMP_CLAUSE__CONDTEMP_);
   tree n1, n2;
@@ -7172,6 +7462,9 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
       loop->latch = cont_bb;
       add_loop (loop, l1_bb->loop_father);
       loop->safelen = safelen_int;
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	  loop->tasksimd = tasksimd_int;
+#endif
       if (simduid)
 	{
 	  loop->simduid = OMP_CLAUSE__SIMDUID__DECL (simduid);
@@ -8243,7 +8536,11 @@ expand_omp_for (struct omp_region *region, gimple *inner_stmt)
        the introduction of abnormal edges during lowering will prevent
        original loops from being detected.  Fix that up.  */
     loops_state_set (LOOPS_NEED_FIXUP);
-
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	if (omp_find_clause(gimple_omp_for_clauses(fd.for_stmt), OMP_CLAUSE_TILESIMD))
+		expand_ccc_loop_dma(region, &fd, inner_stmt);
+	else
+#endif
   if (gimple_omp_for_kind (fd.for_stmt) == GF_OMP_FOR_KIND_SIMD)
     expand_omp_simd (region, &fd);
   else if (gimple_omp_for_kind (fd.for_stmt) == GF_OMP_FOR_KIND_OACC_LOOP)

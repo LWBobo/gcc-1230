@@ -1682,6 +1682,10 @@ private:
 unsigned int
 pass_dse::execute (function *fun)
 {
+	#ifndef ZHAOCW_20250329_TASK-SIMD
+    	if (flag_task_simd)
+      		return 1;
+	#endif
   unsigned todo = 0;
   bool released_def = false;
 

@@ -1747,6 +1747,10 @@ scan_sharing_clauses (tree clauses, omp_context *ctx)
 	case OMP_CLAUSE_MERGEABLE:
 	case OMP_CLAUSE_PROC_BIND:
 	case OMP_CLAUSE_SAFELEN:
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	case OMP_CLAUSE_TILESIMD:
+	case OMP_CLAUSE_TASKSIMD:
+#endif
 	case OMP_CLAUSE_SIMDLEN:
 	case OMP_CLAUSE_THREADS:
 	case OMP_CLAUSE_SIMD:
@@ -1953,6 +1957,10 @@ scan_sharing_clauses (tree clauses, omp_context *ctx)
 	case OMP_CLAUSE_MERGEABLE:
 	case OMP_CLAUSE_PROC_BIND:
 	case OMP_CLAUSE_SAFELEN:
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	case OMP_CLAUSE_TILESIMD:
+	case OMP_CLAUSE_TASKSIMD:
+#endif
 	case OMP_CLAUSE_SIMDLEN:
 	case OMP_CLAUSE_ALIGNED:
 	case OMP_CLAUSE_DEPEND:

@@ -1855,6 +1855,26 @@ floop-unroll-and-jam
 Common Var(flag_unroll_jam) Optimization
 Perform unroll-and-jam on loops.
 
+; ifdef CCC
+; ifndef ZHAOCW_20250329_TASK-SIMD
+; liyanbing 20181102,modify 20190821
+floop-access-opt
+Common Var(flag_loop_access_opt)  Init(0) Optimization
+Enable Loop Auto DMA transformation
+
+; ifdef CCC
+; ifndef ZHAOCW_20250329_TASK-SIMD
+ftask-vect
+Common Var(flag_task_vect)  Init(0) Optimization
+Enable Task Vect transformation
+
+
+; ifdef CCC
+; ifndef ZHAOCW_20250329_TASK-SIMD
+ftask-simd
+Common Var(flag_task_simd)  Init(0) Optimization
+Enable Task Simd Vect transformation
+
 fgnu-tm
 Common Var(flag_tm)
 Enable support for GNU transactional memory.

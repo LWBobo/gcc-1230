@@ -27,6 +27,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "target.h"
 #include "rtl.h"
 #include "tree.h"
+
+#ifdef ZHAOCW_20250329_TASK-SIMD
+#include "c-family/c-common.h"
+#endif
+
 #include "gimple.h"
 #include "predict.h"
 #include "memmodel.h"
@@ -57,6 +62,152 @@ along with GCC; see the file COPYING3.  If not see
 #include "internal-fn.h"
 #include "gimple-fold.h"
 #include "optabs-query.h"
+
+#ifndef ZHAOCW_20250329_TASK-SIMD
+#include "langhooks.h"
+#include "diagnostic.h"
+
+/* Return the "base" type from TYPE that is suitable to apply attribute
+   vector_size to by stripping arrays, function types, etc.  */
+static tree
+type_for_vector_size_128(tree type)
+{
+  /* We need to provide for vector pointers, vector arrays, and
+     functions returning vectors.  For example:
+
+       __attribute__((vector_size(16))) short *foo;
+
+     In this case, the mode is SI, but the type being modified is
+     HI, so we need to look further.  */
+
+  while (POINTER_TYPE_P(type)
+   || TREE_CODE(type) == FUNCTION_TYPE
+   || TREE_CODE(type) == METHOD_TYPE
+   || TREE_CODE(type) == ARRAY_TYPE
+   || TREE_CODE(type) == OFFSET_TYPE)
+    type = TREE_TYPE(type);
+
+  return type;
+}
+
+static tree
+type_valid_for_vector_size_128(tree type, tree atname, tree args,
+                               unsigned HOST_WIDE_INT *ptrnunits)
+{
+  bool error_p = ptrnunits != NULL;
+
+  /* Get the mode of the type being modified.  */
+  machine_mode orig_mode = TYPE_MODE(type);
+
+  if ((!INTEGRAL_TYPE_P(type) && !SCALAR_FLOAT_TYPE_P(type) && !FIXED_POINT_TYPE_P(type)) 
+  || (!SCALAR_FLOAT_MODE_P(orig_mode) && GET_MODE_CLASS(orig_mode) != MODE_INT && !ALL_SCALAR_FIXED_POINT_MODE_P(orig_mode))
+  || !tree_fits_uhwi_p(TYPE_SIZE_UNIT(type)) 
+  || TREE_CODE(type) == BOOLEAN_TYPE)
+  {
+    if (error_p)
+      error("invalid vector type for attribute %qE", atname);
+    else
+      warning(OPT_Wattributes, "invalid vector type for attribute %qE",
+              atname);
+    return NULL_TREE;
+  }
+
+  /* When no argument has been provided this is just a request to validate
+     the type above.  Return TYPE to indicate success.  */
+  if (!args)
+    return type;
+
+  tree size = TREE_VALUE(args);
+  /* Erroneous arguments have already been diagnosed.  */
+  if (size == error_mark_node)
+    return NULL_TREE;
+
+  // if (size && TREE_CODE(size) != IDENTIFIER_NODE && TREE_CODE(size) != FUNCTION_DECL)
+  //   size = default_conversion(size);
+
+  if (TREE_CODE(size) != INTEGER_CST)
+  {
+    if (error_p)
+      error("%qE attribute argument value %qE is not an integer constant",
+            atname, size);
+    else
+      warning(OPT_Wattributes,
+              "%qE attribute argument value %qE is not an integer constant",
+              atname, size);
+    return NULL_TREE;
+  }
+
+  if (!TYPE_UNSIGNED(TREE_TYPE(size)) && tree_int_cst_sgn(size) < 0)
+  {
+    if (error_p)
+      error("%qE attribute argument value %qE is negative",
+            atname, size);
+    else
+      warning(OPT_Wattributes,
+              "%qE attribute argument value %qE is negative",
+              atname, size);
+    return NULL_TREE;
+  }
+
+  /* The attribute argument value is constrained by the maximum bit
+     alignment representable in unsigned int on the host.  */
+  unsigned HOST_WIDE_INT vecsize;
+  unsigned HOST_WIDE_INT maxsize = tree_to_uhwi(max_object_size());
+  if (!tree_fits_uhwi_p(size) || (vecsize = tree_to_uhwi(size)) > maxsize)
+  {
+    if (error_p)
+      error("%qE attribute argument value %qE exceeds %wu",
+            atname, size, maxsize);
+    else
+      warning(OPT_Wattributes,
+              "%qE attribute argument value %qE exceeds %wu",
+              atname, size, maxsize);
+    return NULL_TREE;
+  }
+
+  if (vecsize % tree_to_uhwi(TYPE_SIZE_UNIT(type)))
+  {
+    if (error_p)
+      error("vector size not an integral multiple of component size");
+    return NULL_TREE;
+  }
+
+  if (vecsize == 0)
+  {
+    error("zero vector size");
+    return NULL;
+  }
+
+  /* Calculate how many units fit in the vector.  */
+  unsigned HOST_WIDE_INT nunits = vecsize / tree_to_uhwi(TYPE_SIZE_UNIT(type));
+  if (nunits & (nunits - 1))
+  {
+    if (error_p)
+      error("number of vector components %wu not a power of two", nunits);
+    else
+      warning(OPT_Wattributes,
+              "number of vector components %wu not a power of two", nunits);
+    return NULL_TREE;
+  }
+
+  if (nunits >= (unsigned HOST_WIDE_INT)INT_MAX)
+  {
+    if (error_p)
+      error("number of vector components %wu exceeds %d",
+            nunits, INT_MAX - 1);
+    else
+      warning(OPT_Wattributes,
+              "number of vector components %wu exceeds %d",
+              nunits, INT_MAX - 1);
+    return NULL_TREE;
+  }
+
+  if (ptrnunits)
+    *ptrnunits = nunits;
+
+  return type;
+}
+#endif
 
 /* Return true if load- or store-lanes optab OPTAB is implemented for
    COUNT vectors of type VECTYPE.  NAME is the name of OPTAB.
@@ -3231,6 +3382,38 @@ vect_analyze_group_access (vec_info *vinfo, dr_vec_info *dr_info)
   return true;
 }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+// 获取语句是否位于嵌套循环中
+static bool is_loop_in_tasksimd_loop(loop_p loop)
+{
+
+  struct loop *current_loop = loop;
+
+  // 如果没有找到对应的循环，返回 false
+  if (!current_loop)
+    return false;
+
+  // 计算循环嵌套深度
+  unsigned depth = 0;
+  while (current_loop)
+  {
+    if (current_loop->tasksimd == 1)
+      return true;
+
+    // 获取外层循环，superloops 是一个包含外层循环的容器superloops 是一个动态数组，存储了当前循环的所有外层循环。它按从最外层到最近外层的顺序排列，为循环嵌套关系的分析提供便利。
+    if (!current_loop->superloops)
+      break; // 没有外层循环，退出
+
+    // 获取第一个外层循环
+    // current_loop = (*current_loop->superloops)[0];
+    current_loop = current_loop->superloops->last();
+  }
+
+  // 如果深度大于2，说明是多层嵌套循环
+  return false;
+}
+#endif
+
 /* Analyze the access pattern of the data-reference DR_INFO.
    In case of non-consecutive accesses call vect_analyze_group_access() to
    analyze groups of accesses.  */
@@ -3239,6 +3422,13 @@ static bool
 vect_analyze_data_ref_access (vec_info *vinfo, dr_vec_info *dr_info)
 {
   data_reference *dr = dr_info->dr;
+#ifdef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd)
+  {
+    tree step00 = build_int_cst(NULL_TREE, 8); // 将步长设置为4
+    DR_STEP(dr) = step00;                      // 假设有这样的赋值逻辑
+  }
+#endif
   tree step = DR_STEP (dr);
   tree scalar_type = TREE_TYPE (DR_REF (dr));
   stmt_vec_info stmt_info = dr_info->stmt;
@@ -3265,7 +3455,14 @@ vect_analyze_data_ref_access (vec_info *vinfo, dr_vec_info *dr_info)
       DR_GROUP_FIRST_ELEMENT (stmt_info) = NULL;
       DR_GROUP_NEXT_ELEMENT (stmt_info) = NULL;
       if (!nested_in_vect_loop_p (loop, stmt_info))
+#ifndef ZHAOCW_20250329_TASK-SIMD
+      if (flag_task_simd && is_loop_in_tasksimd_loop(loop))
+        return true;
+      else
+        return DR_IS_READ(dr);
+#else
 	return DR_IS_READ (dr);
+#endif
       /* Allow references with zero step for outer loops marked
 	 with pragma omp simd only - it guarantees absence of
 	 loop-carried dependencies between inner loop iterations.  */
@@ -5449,8 +5646,54 @@ vect_create_data_ref_ptr (vec_info *vinfo, stmt_vec_info stmt_info,
 	}
       while (sinfo);
     }
+#ifdef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd)
+  {
+#define long_long_integer_type_node integer_types[itk_long_long]
+
+    tree node128;
+
+    node128 = make_node(TYPE_DECL PASS_MEM_STAT);
+
+    tree new_type_name = get_identifier("__m128i");
+    DECL_NAME(node128) = new_type_name;
+    long_long_integer_type_node = make_signed_type(LONG_LONG_TYPE_SIZE);
+    TREE_TYPE(node128) = long_long_integer_type_node;
+    // TREE_TYPE(node128) = make_signed_type(LONG_LONG_TYPE_SIZE);
+    tree new_attr_name = get_identifier("vector_size");
+    tree args_value = build_int_cst(NULL_TREE, 16);
+    tree args = tree_cons(NULL_TREE, args_value, NULL_TREE);
+
+    /* Determine the "base" type to apply the attribute to.  */
+    tree *node = &TREE_TYPE(node128);
+    tree type = type_for_vector_size_128(*node);
+
+    /* Get the vector size (in bytes) and let the function compute
+       the number of vector units.  */
+    unsigned HOST_WIDE_INT nunits;
+    type = type_valid_for_vector_size_128(type, new_attr_name, args, &nunits);
+    if (!type)
+      return NULL_TREE;
+
+    gcc_checking_assert(args != NULL);
+
+    tree new_type = build_vector_type(type, nunits);
+    // DECL_NAME(new_type) = new_type_name;
+    *node = lang_hooks.types.reconstruct_complex_type(*node, new_type);
+
+    poly_uint64 vf = LOOP_VINFO_VECT_FACTOR(loop_vinfo);
+    tree arraynode = build_array_type_nelts(*node, vf);
+
+    /* Build back pointers if needed.  */
+
+    aggr_ptr_type = build_pointer_type_for_mode(arraynode, ptr_mode, need_ref_all);
+  }
+  else
+    aggr_ptr_type = build_pointer_type_for_mode(aggr_type, ptr_mode, need_ref_all);
+#else
   aggr_ptr_type = build_pointer_type_for_mode (aggr_type, VOIDmode,
 					       need_ref_all);
+#endif
   aggr_ptr = vect_get_new_vect_var (aggr_ptr_type, vect_pointer_var, base_name);
 
 
@@ -5519,8 +5762,13 @@ vect_create_data_ref_ptr (vec_info *vinfo, stmt_vec_info stmt_info,
       /* Accesses to invariant addresses should be handled specially
 	 by the caller.  */
       tree step = vect_dr_behavior (vinfo, dr_info)->step;
+#ifndef ZHAOCW_20250329_TASK-SIMD
+      if (!flag_task_simd 
+        || (flag_task_simd && !is_loop_in_tasksimd_loop(loop)))
+        gcc_assert(!integer_zerop(step));
+#else
       gcc_assert (!integer_zerop (step));
-
+#endif
       if (iv_step == NULL_TREE)
 	{
 	  /* The step of the aggregate pointer is the type size,

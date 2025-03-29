@@ -205,6 +205,9 @@ DEFTIMEVAR (TV_LOOP_JAM              , "unroll and jam")
 DEFTIMEVAR (TV_COMPLETE_UNROLL       , "complete unrolling")
 DEFTIMEVAR (TV_SCALAR_CLEANUP        , "scalar cleanup")
 DEFTIMEVAR (TV_TREE_PARALLELIZE_LOOPS, "tree parallelize loops")
+/* ZHAOCW_20250329_TASK-SIMD */
+DEFTIMEVAR (TV_MANUAL_VECT        , "tree manual vect")
+/* ZHAOCW_20250329_TASK-SIMD END */
 DEFTIMEVAR (TV_TREE_VECTORIZATION    , "tree vectorization")
 DEFTIMEVAR (TV_TREE_SLP_VECTORIZATION, "tree slp vectorization")
 DEFTIMEVAR (TV_GRAPHITE              , "Graphite")

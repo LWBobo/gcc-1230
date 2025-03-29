@@ -749,6 +749,10 @@ try_unroll_loop_completely (class loop *loop,
 			    dump_user_location_t locus, bool allow_peel,
 			    bool cunrolli)
 {
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd)
+    return true;
+#endif
   unsigned HOST_WIDE_INT n_unroll = 0;
   bool n_unroll_found = false;
   edge edge_to_cancel = NULL;
@@ -1530,6 +1534,10 @@ tree_unroll_loops_completely_1 (bool may_increase_size, bool unroll_outer,
 static unsigned int
 tree_unroll_loops_completely (bool may_increase_size, bool unroll_outer, bool cunrolli)
 {
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd)
+    return true;
+#endif
   bitmap father_bbs = BITMAP_ALLOC (NULL);
   bool changed;
   int iteration = 0;

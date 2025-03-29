@@ -3536,7 +3536,10 @@ run_tree_predictive_commoning (struct function *fun, bool allow_unroll_p)
 {
   if (number_of_loops (fun) <= 1)
     return 0;
-
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd)
+    return 0;
+#endif
   return tree_predictive_commoning (allow_unroll_p);
 }
 

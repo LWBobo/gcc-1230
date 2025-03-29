@@ -16233,6 +16233,12 @@ c_parser_omp_clause_name (c_parser *parser)
 	    result = PRAGMA_OACC_CLAUSE_TILE;
 	  else if (!strcmp ("to", p))
 	    result = PRAGMA_OMP_CLAUSE_TO;
+	#ifndef ZHAOCW_20250329_TASK-SIMD
+	  else if (!strcmp("tilesimd", p))
+		result = PRAGMA_OMP_CLAUSE_TILESIMD;
+	  else if (!strcmp("tasksimd", p))
+		result = PRAGMA_OMP_CLAUSE_TASKSIMD;
+	#endif	
 	  break;
 	case 'u':
 	  if (!strcmp ("uniform", p))
@@ -19425,6 +19431,76 @@ c_parser_omp_clause_safelen (c_parser *parser, tree list)
   return c;
 }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+static tree
+c_parser_omp_clause_tilesimd(c_parser *parser, tree list)
+{
+	location_t clause_loc = c_parser_peek_token(parser)->location;
+	tree c, t;
+
+	matching_parens parens;
+	if (!parens.require_open(parser))
+		return list;
+
+	location_t expr_loc = c_parser_peek_token(parser)->location;
+	c_expr expr = c_parser_expr_no_commas(parser, NULL);
+	expr = convert_lvalue_to_rvalue(expr_loc, expr, false, true);
+	t = expr.value;
+	t = c_fully_fold(t, false, NULL);
+	if (TREE_CODE(t) != INTEGER_CST || !INTEGRAL_TYPE_P(TREE_TYPE(t)) || tree_int_cst_sgn(t) != 1)
+	{
+		error_at(clause_loc, "%<tilesimd%> clause expression must "
+							 "be positive constant integer expression");
+		t = NULL_TREE;
+	}
+
+	parens.skip_until_found_close(parser);
+	if (t == NULL_TREE || t == error_mark_node)
+		return list;
+
+	check_no_duplicate_clause(list, OMP_CLAUSE_TILESIMD, "tilesimd");
+
+	c = build_omp_clause(clause_loc, OMP_CLAUSE_TILESIMD);
+	OMP_CLAUSE_TILESIMD_EXPR(c) = t;
+	OMP_CLAUSE_CHAIN(c) = list;
+	return c;
+}
+
+static tree
+c_parser_omp_clause_tasksimd(c_parser *parser, tree list)
+{
+	location_t clause_loc = c_parser_peek_token(parser)->location;
+	tree c, t;
+
+	matching_parens parens;
+	if (!parens.require_open(parser))
+		return list;
+
+	location_t expr_loc = c_parser_peek_token(parser)->location;
+	c_expr expr = c_parser_expr_no_commas(parser, NULL);
+	expr = convert_lvalue_to_rvalue(expr_loc, expr, false, true);
+	t = expr.value;
+	t = c_fully_fold(t, false, NULL);
+	if (TREE_CODE(t) != INTEGER_CST || !INTEGRAL_TYPE_P(TREE_TYPE(t)) || tree_int_cst_sgn(t) != 1)
+	{
+		error_at(clause_loc, "%<tasksimd%> clause expression must "
+							 "be positive constant integer expression");
+		t = NULL_TREE;
+	}
+
+	parens.skip_until_found_close(parser);
+	if (t == NULL_TREE || t == error_mark_node)
+		return list;
+
+	check_no_duplicate_clause(list, OMP_CLAUSE_TASKSIMD, "tasksimd");
+
+	c = build_omp_clause(clause_loc, OMP_CLAUSE_TASKSIMD);
+	OMP_CLAUSE_TASKSIMD_EXPR(c) = t;
+	OMP_CLAUSE_CHAIN(c) = list;
+	return c;
+}
+#endif
+
 /* OpenMP 4.0:
    simdlen ( constant-expression ) */
 
@@ -21494,6 +21570,16 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  clauses = c_parser_omp_clause_safelen (parser, clauses);
 	  c_name = "safelen";
 	  break;
+#ifndef ZHAOCW_20250329_TASK-SIMD
+	case PRAGMA_OMP_CLAUSE_TILESIMD:
+	  clauses = c_parser_omp_clause_tilesimd(parser, clauses);
+	  c_name = "tilesimd";
+	  break;
+	case PRAGMA_OMP_CLAUSE_TASKSIMD:
+	  clauses = c_parser_omp_clause_tasksimd(parser, clauses);
+	  c_name = "tasksimd";
+	  break;
+#endif  
 	case PRAGMA_OMP_CLAUSE_SIMDLEN:
 	  clauses = c_parser_omp_clause_simdlen (parser, clauses);
 	  c_name = "simdlen";
@@ -24657,7 +24743,22 @@ c_parser_omp_loop (location_t loc, c_parser *parser,
 
    LOC is the location of the #pragma token.
 */
-
+#ifndef ZHAOCW_20250329_TASK-SIMD
+#define OMP_SIMD_CLAUSE_MASK					\
+	( (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_TILESIMD)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_TASKSIMD)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_SAFELEN)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_SIMDLEN)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_LINEAR)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_ALIGNED)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_PRIVATE)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_LASTPRIVATE)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_REDUCTION)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_COLLAPSE)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_IF)		\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_NONTEMPORAL)	\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_ORDER))
+#else
 #define OMP_SIMD_CLAUSE_MASK					\
 	( (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_SAFELEN)	\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_SIMDLEN)	\
@@ -24670,6 +24771,7 @@ c_parser_omp_loop (location_t loc, c_parser *parser,
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_IF)		\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_NONTEMPORAL)	\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_ORDER))
+#endif
 
 static tree
 c_parser_omp_simd (location_t loc, c_parser *parser,

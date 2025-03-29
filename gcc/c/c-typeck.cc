@@ -16000,6 +16000,10 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
   bitmap_head oacc_reduction_head, is_on_device_head;
   tree c, t, type, *pc;
   tree simdlen = NULL_TREE, safelen = NULL_TREE;
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  tree tilesimd = NULL_TREE;
+  tree tasksimd = NULL_TREE;
+#endif
   bool branch_seen = false;
   bool copyprivate_seen = false;
   bool mergeable_seen = false;
@@ -17384,6 +17388,18 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  safelen = c;
 	  pc = &OMP_CLAUSE_CHAIN (c);
 	  continue;
+  
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  case OMP_CLAUSE_TILESIMD:
+    tilesimd = c;
+    pc = &OMP_CLAUSE_CHAIN(c);
+    continue;
+  case OMP_CLAUSE_TASKSIMD:
+    tasksimd = c;
+    pc = &OMP_CLAUSE_CHAIN(c);
+    continue;
+#endif
+
 	case OMP_CLAUSE_SIMDLEN:
 	  simdlen = c;
 	  pc = &OMP_CLAUSE_CHAIN (c);

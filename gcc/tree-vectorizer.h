@@ -1809,8 +1809,20 @@ vector_costs::suggested_epilogue_mode () const
 inline bool
 nested_in_vect_loop_p (class loop *loop, stmt_vec_info stmt_info)
 {
+#ifdef ZHAOCW_20250329_TASK-SIMD
+   if (flag_task_simd)
+     return (loop->inner 
+            && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father)) 
+         || (loop->inner->next 
+            && (loop->inner->next == (gimple_bb(stmt_info->stmt))->loop_father));
+   else
+     return (loop->inner 
+         && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father));
+ 
+#else
   return (loop->inner
 	  && (loop->inner == (gimple_bb (stmt_info->stmt))->loop_father));
+#endif
 }
 
 /* PHI is either a scalar reduction phi or a scalar induction phi.

@@ -4439,6 +4439,10 @@ pre_valueize (tree name)
 unsigned int
 pass_pre::execute (function *fun)
 {
+  #ifndef ZHAOCW_20250329_TASK-SIMD
+    if (flag_task_simd)
+      return 1;
+  #endif
   unsigned int todo = 0;
 
   do_partial_partial =

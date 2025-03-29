@@ -1288,6 +1288,22 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       pp_right_paren (pp);
       break;
 
+  #ifndef ZHAOCW_20250329_TASK-SIMD
+    case OMP_CLAUSE_TILESIMD:
+      pp_string(pp, "tilesimd(");
+      dump_generic_node(pp, OMP_CLAUSE_TILESIMD_EXPR(clause),
+                        spc, flags, false);
+      pp_right_paren(pp);
+      break;
+      
+    case OMP_CLAUSE_TASKSIMD:
+      pp_string(pp, "tasksimd(");
+      dump_generic_node(pp, OMP_CLAUSE_TASKSIMD_EXPR(clause),
+                        spc, flags, false);
+      pp_right_paren(pp);
+      break;
+  #endif
+
     case OMP_CLAUSE_SIMDLEN:
       pp_string (pp, "simdlen(");
       dump_generic_node (pp, OMP_CLAUSE_SIMDLEN_EXPR (clause),

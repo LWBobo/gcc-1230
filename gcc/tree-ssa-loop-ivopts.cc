@@ -8199,6 +8199,10 @@ finish:
 void
 tree_ssa_iv_optimize (void)
 {
+#ifdef ZHAOCW_20250329_TASK-SIMD
+  if (flag_task_simd)
+    return;
+#endif
   struct ivopts_data data;
   auto_bitmap toremove;
 

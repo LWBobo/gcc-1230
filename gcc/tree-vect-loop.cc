@@ -764,6 +764,10 @@ vect_analyze_scalar_cycles (loop_vec_info loop_vinfo, bool slp)
 
   if (loop->inner)
     vect_analyze_scalar_cycles_1 (loop_vinfo, loop->inner, slp);
+#ifndef liull202411
+  if (flag_task_simd && loop->inner && loop->inner->next)
+    vect_analyze_scalar_cycles_1(loop_vinfo, loop->inner->next);
+#endif
 }
 
 /* Transfer group and reduction information from STMT_INFO to its
@@ -1821,6 +1825,29 @@ vect_analyze_loop_form (class loop *loop, gimple *loop_vectorized_call,
 	 The inner-loop also has the properties expected of inner-most loops
 	 as described above.  */
 
+   #ifndef ZHAOCW_20250329_TASK-SIMD
+   entryedge = loop_preheader_edge(innerloop);
+
+   if (!flag_task_simd || (flag_task_simd && loop->tasksimd != 1))
+   {
+     if ((loop->inner)->inner || (loop->inner)->next)
+       return opt_result::failure_at(vect_location,
+                                     "not vectorized:"
+                                     " multiple nested loops.\n");
+     if (loop->num_nodes != 5)
+       return opt_result::failure_at(vect_location,
+                                     "not vectorized:"
+                                     " control flow in loop.\n");
+
+     if (entryedge->src != loop->header 
+      || !single_exit(innerloop) 
+      || single_exit(innerloop)->dest != EDGE_PRED(loop->latch, 0)->src)
+       return opt_result::failure_at(vect_location,
+                                     "not vectorized:"
+                                     " unsupported outerloop form.\n");
+   }
+
+#else
       if ((loop->inner)->inner || (loop->inner)->next)
 	return opt_result::failure_at (vect_location,
 				       "not vectorized:"
@@ -1833,6 +1860,7 @@ vect_analyze_loop_form (class loop *loop, gimple *loop_vectorized_call,
 	return opt_result::failure_at (vect_location,
 				       "not vectorized:"
 				       " unsupported outerloop form.\n");
+#endif
 
       /* Analyze the inner-loop.  */
       vect_loop_form_info inner;
@@ -1987,7 +2015,14 @@ vect_create_loop_vinfo (class loop *loop, vec_info_shared *shared,
 	LOOP_VINFO_INNER_LOOP_COST_FACTOR (loop_vinfo)
 	  = wi::smin (nit, param_vect_inner_loop_cost_factor).to_uhwi ();
     }
-
+#ifndef ZHAOCW_20250329_TASK-SIMD
+    if (flag_task_simd && loop->inner && loop->inner->next)
+    {
+      // gcond *inner_next_cond = get_loop_exit_condition(loop->inner->next)
+      stmt_vec_info inner_next_loop_cond_info = loop_vinfo->lookup_stmt(get_loop_exit_condition(loop->inner->next));
+      STMT_VINFO_TYPE(inner_next_loop_cond_info) = loop_exit_ctrl_vec_info_type;
+    }
+#endif
   return loop_vinfo;
 }
 
@@ -2224,10 +2259,20 @@ vect_analyze_loop_operations (loop_vec_info loop_vinfo)
 					      -1, false, &cost_vec);
 
           if (!ok)
+#ifndef ZHAOCW_20250329_TASK-SIMD
+            if (flag_task_vect)
+              return opt_result::success();
+            else
+              return opt_result::failure_at (phi,
+                "not vectorized: relevant phi not "
+                "supported: %G",
+                static_cast <gimple *> (phi));
+#else
 	    return opt_result::failure_at (phi,
 					   "not vectorized: relevant phi not "
 					   "supported: %G",
 					   static_cast <gimple *> (phi));
+#endif
         }
 
       for (gimple_stmt_iterator si = gsi_start_bb (bb); !gsi_end_p (si);
@@ -2503,6 +2548,38 @@ vect_analyze_loop_costing (loop_vec_info loop_vinfo,
   return 1;
 }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+// 获取语句是否位于嵌套循环中
+static bool is_loop_in_tasksimd_loop(loop_p loop)
+{
+
+  struct loop *current_loop = loop;
+
+  // 如果没有找到对应的循环，返回 false
+  if (!current_loop)
+    return false;
+
+  // 计算循环嵌套深度
+  unsigned depth = 0;
+  while (current_loop)
+  {
+    depth++; // 每向上一层，深度加1
+    if (current_loop->tasksimd == 1)
+      return true;
+    // 获取外层循环，superloops 是一个包含外层循环的容器superloops 是一个动态数组，存储了当前循环的所有外层循环。它按从最外层到最近外层的顺序排列，为循环嵌套关系的分析提供便利。
+    if (!current_loop->superloops)
+      break; // 没有外层循环，退出
+
+    // 获取第一个外层循环
+    // current_loop = (*current_loop->superloops)[0];
+    current_loop = current_loop->superloops->last();
+  }
+
+  // 如果深度大于2，说明是多层嵌套循环
+  return false;
+}
+#endif
+
 static opt_result
 vect_get_datarefs_in_loop (loop_p loop, basic_block *bbs,
 			   vec<data_reference_p> *datarefs)
@@ -2554,6 +2631,14 @@ vect_get_datarefs_in_loop (loop_p loop, basic_block *bbs,
 					 && get_base_address (op)))))
 			  continue;
 		      }
+#ifndef ZHAOCW_20250329_TASK-SIMD
+          if (flag_task_simd && is_loop_in_tasksimd_loop(loop))
+          {
+            const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fndecl));
+            if (strcmp(fn_name, "printf") == 0)
+              continue; // 跳过 printf 函数
+          }
+#endif          
 		  }
 	      }
 	    return res;
@@ -3574,7 +3659,41 @@ vect_analyze_loop (class loop *loop, gimple *loop_vectorized_call,
       && LOOP_VINFO_VECTORIZABLE_P (loop_vec_info_for_loop (loop_outer (loop))))
     return opt_loop_vec_info::failure_at (vect_location,
 					  "outer-loop already vectorized.\n");
-
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (!flag_task_simd || (flag_task_simd && !is_loop_in_tasksimd_loop(loop)))
+    if (!find_loop_nest(loop, &shared->loop_nest))
+      return opt_loop_vec_info::failure_at(vect_location,
+                                           "not vectorized: loop nest containing two or more consecutive inner"
+                                           " loops cannot be vectorized\n");
+  /* Analyze the loop form.  */
+  vect_loop_form_info loop_form_info;
+  opt_result res = vect_analyze_loop_form(loop, &loop_form_info);
+  if (!flag_task_simd)
+  {
+    if (!res)
+    {
+      if (dump_enabled_p())
+        dump_printf_loc(MSG_MISSED_OPTIMIZATION, vect_location,
+                        "bad loop form.\n");
+      return opt_loop_vec_info::propagate_failure(res);
+    }
+    if (!integer_onep(loop_form_info.assumptions))
+    {
+      /* We consider to vectorize this loop by versioning it under
+   some assumptions.  In order to do this, we need to clear
+   existing information computed by scev and niter analyzer.  */
+      scev_reset_htab();
+      free_numbers_of_iterations_estimates(loop);
+      /* Also set flag for this loop so that following scev and niter
+   analysis are done under the assumptions.  */
+      loop_constraint_set(loop, LOOP_C_FINITE);
+    }
+    else
+    /* Clear the existing niter information to make sure the nonwrapping flag
+       will be calculated and set propriately.  */
+    free_numbers_of_iterations_estimates (loop);
+  }
+#else
   if (!find_loop_nest (loop, &shared->loop_nest))
     return opt_loop_vec_info::failure_at
       (vect_location,
@@ -3607,7 +3726,7 @@ vect_analyze_loop (class loop *loop, gimple *loop_vectorized_call,
     /* Clear the existing niter information to make sure the nonwrapping flag
        will be calculated and set propriately.  */
     free_numbers_of_iterations_estimates (loop);
-
+#endif
   auto_vector_modes vector_modes;
   /* Autodetect first vector size we try.  */
   vector_modes.safe_push (VOIDmode);
@@ -9798,6 +9917,22 @@ vect_can_vectorize_without_simd_p (code_helper code)
 	  && vect_can_vectorize_without_simd_p (tree_code (code)));
 }
 
+#ifndef ZHAOCW_20250329_TASK-SIMD
+static inline bool
+nested_in_vect_loop_p_self(class loop *loop, stmt_vec_info stmt_info)
+{
+
+  if (flag_task_simd && is_loop_in_tasksimd_loop(loop))
+    return (loop->inner 
+  && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father)) 
+  || (loop->inner 
+    && loop->inner->next 
+    && (loop->inner->next == (gimple_bb(stmt_info->stmt))->loop_father));
+  else
+    return (loop->inner && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father));
+}
+#endif
+
 /* Create vector init for vectorized iv.  */
 static tree
 vect_create_nonlinear_iv_init (gimple_seq* stmts, tree init_expr,
@@ -10432,7 +10567,11 @@ vectorizable_induction (loop_vec_info loop_vinfo,
   gcc_assert (ncopies >= 1);
 
   /* FORNOW. These restrictions should be relaxed.  */
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (nested_in_vect_loop_p_self(loop, stmt_info))
+#else
   if (nested_in_vect_loop_p (loop, stmt_info))
+#endif
     {
       imm_use_iterator imm_iter;
       use_operand_p use_p;
@@ -10478,11 +10617,30 @@ vectorizable_induction (loop_vec_info loop_vinfo,
 	}
 
       nested_in_vect_loop = true;
+#ifndef ZHAOCW_20250329_TASK-SIMD
+      if (flag_task_simd)
+      {
+        if (loop->inner && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father))
+          iv_loop = loop->inner;
+        else if (loop->inner 
+          && loop->inner->next 
+          && loop->inner->next == (gimple_bb(stmt_info->stmt))->loop_father)
+          iv_loop = loop->inner->next;
+      }
+      else
+        iv_loop = loop->inner;
+#else
       iv_loop = loop->inner;
+#endif
     }
   else
     iv_loop = loop;
+#ifndef ZHAOCW_20250329_TASK-SIMD
+  if (!flag_task_simd)
+    gcc_assert(iv_loop == (gimple_bb(phi))->loop_father);
+#else
   gcc_assert (iv_loop == (gimple_bb (phi))->loop_father);
+#endif
 
   if (slp_node && (!nunits.is_constant () && SLP_TREE_LANES (slp_node) != 1))
     {
