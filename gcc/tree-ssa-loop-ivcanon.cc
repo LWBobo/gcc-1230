@@ -749,7 +749,7 @@ try_unroll_loop_completely (class loop *loop,
 			    dump_user_location_t locus, bool allow_peel,
 			    bool cunrolli)
 {
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd)
     return true;
 #endif
@@ -1534,7 +1534,7 @@ tree_unroll_loops_completely_1 (bool may_increase_size, bool unroll_outer,
 static unsigned int
 tree_unroll_loops_completely (bool may_increase_size, bool unroll_outer, bool cunrolli)
 {
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd)
     return true;
 #endif

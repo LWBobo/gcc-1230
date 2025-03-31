@@ -78,7 +78,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "c-family/c-ubsan.h"
 #include "gcc-urlifier.h"
 
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 #include "../../libcpp/omp_global.h"
 #endif
 /* We need to walk over decls with incomplete struct/union/enum types
@@ -16233,7 +16233,7 @@ c_parser_omp_clause_name (c_parser *parser)
 	    result = PRAGMA_OACC_CLAUSE_TILE;
 	  else if (!strcmp ("to", p))
 	    result = PRAGMA_OMP_CLAUSE_TO;
-	#ifndef ZHAOCW_20250329_TASK-SIMD
+	#ifndef ZHAOCW_20250329_TASK_SIMD
 	  else if (!strcmp("tilesimd", p))
 		result = PRAGMA_OMP_CLAUSE_TILESIMD;
 	  else if (!strcmp("tasksimd", p))
@@ -19431,7 +19431,7 @@ c_parser_omp_clause_safelen (c_parser *parser, tree list)
   return c;
 }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 static tree
 c_parser_omp_clause_tilesimd(c_parser *parser, tree list)
 {
@@ -21570,7 +21570,7 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  clauses = c_parser_omp_clause_safelen (parser, clauses);
 	  c_name = "safelen";
 	  break;
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 	case PRAGMA_OMP_CLAUSE_TILESIMD:
 	  clauses = c_parser_omp_clause_tilesimd(parser, clauses);
 	  c_name = "tilesimd";
@@ -21623,7 +21623,7 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  clauses = c_parser_omp_clause_nocontext (parser, clauses);
 	  break;
 	default:
-	#ifndef ZHAOCW_20250328_FUNC-SIMD
+	#ifndef ZHAOCW_20250328_FUNC_SIMD
 	{
 		gcc_assert (parser->in_pragma);
 		parser->in_pragma = false;
@@ -21661,7 +21661,7 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
  saw_error:
   if (!nested)
     c_parser_skip_to_pragma_eol (parser);
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 new_saw_error:
 	parser_omp_clause = false;
 #endif
@@ -24743,7 +24743,7 @@ c_parser_omp_loop (location_t loc, c_parser *parser,
 
    LOC is the location of the #pragma token.
 */
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 #define OMP_SIMD_CLAUSE_MASK					\
 	( (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_TILESIMD)	\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_TASKSIMD)	\

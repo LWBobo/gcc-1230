@@ -1064,7 +1064,7 @@ vect_transform_loops (hash_table<simduid_to_vf> *&simduid_to_vf_htab,
   gcc_assert (!need_ssa_update_p (cfun));
 
   /* Epilogue of vectorized loop must be vectorized too.  */
-#ifndef liull202411
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (new_loop)
   {
     if (flag_task_simd)

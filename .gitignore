@@ -74,3 +74,6 @@ stamp-*
 
 # ADDITIONS from GCCRS front-end
 libgrust/*/target/
+
+gcc_build/
+gcc_install/

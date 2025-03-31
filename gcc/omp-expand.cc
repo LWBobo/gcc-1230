@@ -6450,7 +6450,7 @@ expand_omp_for_static_chunk (struct omp_region *region,
 
 /* For ccc sbuf/dbuf, liyanbing 20180502. */
 // #ifdef CCC
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 /* A subroutine of expand_omp_for. Generate code for a loop with
    Parallel C  sbuf/dbuf directive. The main work is to do loop tile.
    Given parameters:
@@ -6524,7 +6524,8 @@ expand_ccc_loop_dma(struct omp_region *region,
 
 	/* Generate necessary bb. */
 	entry_bb = region->entry;
-	se = split_block(entry_bb, last_stmt(entry_bb));
+	// se = split_block(entry_bb, last_stmt(entry_bb));
+	se = split_block(entry_bb, last_nondebug_stmt(entry_bb));
 	entry_bb = se->src;
 	iter_part_bb = se->dest;
 	cont_bb = region->cont;
@@ -6765,7 +6766,7 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
 			      OMP_CLAUSE_IF);
   tree simdlen = omp_find_clause (gimple_omp_for_clauses (fd->for_stmt),
 				  OMP_CLAUSE_SIMDLEN);
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 	int tasksimd_int = INT_MAX;
 	tree tasksimd = omp_find_clause(gimple_omp_for_clauses(fd->for_stmt),
 									OMP_CLAUSE_TASKSIMD);
@@ -7462,7 +7463,7 @@ expand_omp_simd (struct omp_region *region, struct omp_for_data *fd)
       loop->latch = cont_bb;
       add_loop (loop, l1_bb->loop_father);
       loop->safelen = safelen_int;
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 	  loop->tasksimd = tasksimd_int;
 #endif
       if (simduid)
@@ -8536,7 +8537,7 @@ expand_omp_for (struct omp_region *region, gimple *inner_stmt)
        the introduction of abnormal edges during lowering will prevent
        original loops from being detected.  Fix that up.  */
     loops_state_set (LOOPS_NEED_FIXUP);
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 	if (omp_find_clause(gimple_omp_for_clauses(fd.for_stmt), OMP_CLAUSE_TILESIMD))
 		expand_ccc_loop_dma(region, &fd, inner_stmt);
 	else

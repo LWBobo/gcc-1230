@@ -359,7 +359,7 @@ unsigned const char omp_clause_num_ops[] =
   1, /* OMP_CLAUSE_THREAD_LIMIT  */
   0, /* OMP_CLAUSE_PROC_BIND  */
   1, /* OMP_CLAUSE_SAFELEN  */
-  #ifndef ZHAOCW_20250329_TASK-SIMD
+  #ifndef ZHAOCW_20250329_TASK_SIMD
   1, /* OMP_CLAUSE_TILESIMD  */
   1, /* OMP_CLAUSE_TASKSIMD  */
   #endif
@@ -465,7 +465,7 @@ const char * const omp_clause_code_name[] =
   "thread_limit",
   "proc_bind",
   "safelen",
-  #ifndef ZHAOCW_20250329_TASK-SIMD
+  #ifndef ZHAOCW_20250329_TASK_SIMD
   "tilesimd",
   "tasksimd",
   #endif

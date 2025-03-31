@@ -62,7 +62,7 @@ along with GCC; see the file COPYING3.  If not see
 /* For lang_hooks.types.type_for_mode.  */
 #include "langhooks.h"
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 
 #include "diagnostic.h"
 
@@ -352,7 +352,7 @@ read_vector_array (vec_info *vinfo,
    Emit code to store SSA_NAME VECT in index N of the array.
    The store is part of the vectorization of STMT_INFO.  */
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 
    // 获取bb所在内层loop
    static loop_p stmt_in_loop(gimple *stmt)
@@ -460,7 +460,7 @@ read_vector_array (vec_info *vinfo,
 	   vect_name = make_ssa_name(vect, new_stmt);
 	   gimple_assign_set_lhs(new_stmt, vect_name);
 	   vect_finish_stmt_generation(vinfo, stmt_info, new_stmt, gsi);
-   #ifdef ZHAOCW_20250329_TASK-SIMD
+   #ifdef ZHAOCW_20250329_TASK_SIMD
 	   if (flag_task_simd)
 		   STMT_VINFO_VEC_STMTS(stmt_info).safe_push(new_stmt);
    #endif
@@ -1769,7 +1769,7 @@ vect_get_vec_defs_for_operand (vec_info *vinfo, stmt_vec_info stmt_vinfo,
   else
     {
       def_stmt_info = vect_stmt_to_vectorize (def_stmt_info);
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
 		if (!flag_task_simd)
 			gcc_assert(STMT_VINFO_VEC_STMTS(def_stmt_info).length() == ncopies);
 #else
@@ -3018,7 +3018,7 @@ get_load_store_type (vec_info  *vinfo, stmt_vec_info stmt_info,
       int cmp = compare_step_with_zero (vinfo, stmt_info);
       if (cmp == 0)
 	{
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
 		if (!flag_task_simd)
 #endif
 	  gcc_assert (vls_type == VLS_LOAD);
@@ -3918,7 +3918,7 @@ simple_integer_narrowing (tree vectype_out, tree vectype_in,
   return true;
 }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 
 void print_vect_get_vec_defs_for_operand(vec_info *vinfo, stmt_vec_info stmt_vinfo,
 										 unsigned ncopies,
@@ -4054,8 +4054,10 @@ static bool vectorize_nested_loop_printf(vec_info *vinfo,
 	scalar_dest = gimple_call_lhs(stmt);
 
 	struct loop *current_loop = stmt_in_loop(stmt);
-	// // 获取当前循环的迭代次数上界
+	// // 
+	#ifdef ZHAOCW_20250330_FIX
 	widest_int upper_bound = current_loop->nb_iterations_upper_bound;
+	#endif
 	// tree num_iterations = current_loop->control_ivs->base;
 
 	const long int *i_bound = current_loop->bounds->bound.get_val();
@@ -4064,10 +4066,12 @@ static bool vectorize_nested_loop_printf(vec_info *vinfo,
 	// int upper_bound_value =upper_bound.val[0];
 	// // 修改循环的迭代次数上界
 	widest_int new_upper_bound = 1; // 设置新的上界为100
+	#ifdef ZHAOCW_20250330_FIX
 	current_loop->nb_iterations_upper_bound = new_upper_bound;
 	current_loop->nb_iterations_likely_upper_bound = new_upper_bound;
 	current_loop->nb_iterations_estimate = new_upper_bound;
 	current_loop->bounds->bound = new_upper_bound;
+	#endif
 	// current_loop->control_ivs->base;
 	struct loop *current_loop2 = stmt_in_loop(stmt);
 	// 修改退出条件
@@ -4337,7 +4341,7 @@ vectorizable_call (vec_info *vinfo,
   if (!stmt)
     return false;
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 	if (flag_task_simd)
 	{
 		gcall *stmt = dyn_cast<gcall *>(stmt_info->stmt);
@@ -5075,7 +5079,7 @@ vect_simd_lane_linear (tree op, class loop *loop,
     }
 }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 // 获取当前函数的控制流图并遍历所有基本块
 gimple_stmt_iterator traverse_function_bb_for_gsi(tree base0)
 {
@@ -5173,7 +5177,7 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
   if (fndecl == NULL_TREE)
     return false;
 
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
 	// 获取函数名
 	const char *func_name = IDENTIFIER_POINTER(DECL_NAME(fndecl));
 	// 比较函数名
@@ -5233,7 +5237,7 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
       if (slp_node)
 	op_no = vect_slp_child_index_for_operand (stmt, op_no, false);
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 	tree optype;
 	if (vec_stmt && flag_task_simd && is_stmt_in_tasksimd_loop(stmt))
 	{
@@ -5725,7 +5729,7 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
 	  tree atype;
 	  op = gimple_call_arg (stmt, i + masked_call_offset);
 	  
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 
 if (TREE_CODE(op) == ADDR_EXPR && flag_task_simd && is_stmt_in_tasksimd_loop(stmt))
 {
@@ -10290,7 +10294,7 @@ vectorizable_store (vec_info *vinfo,
 	      continue;
 	    }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 		tree lhs;
 		int array_num;
 		tree vec_array;
@@ -10327,7 +10331,7 @@ vectorizable_store (vec_info *vinfo,
 		}
 	      else
 		vec_oprnd = dr_chain[i];
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 		if (flag_task_simd && TREE_CODE(lhs) == ARRAY_REF)
 		{
 			// Extract the array index (rhs part of in[k])
@@ -10354,7 +10358,7 @@ vectorizable_store (vec_info *vinfo,
 	  if (vec_mask)
 	    final_mask = prepare_vec_mask (loop_vinfo, mask_vectype, final_mask,
 					   vec_mask, gsi);
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 			if (!flag_task_simd)
 			{
 				gcall *call;
@@ -11738,7 +11742,7 @@ vectorizable_load (vec_info *vinfo,
   dr_vec_info *dr_info = STMT_VINFO_DR_INFO (stmt_info), *first_dr_info = NULL;
   ensure_base_align (dr_info);
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd 
 	&& is_stmt_in_nested_loop(stmt_info->stmt) 
 	&& is_stmt_in_tasksimd_loop(stmt_info->stmt))
@@ -11807,7 +11811,11 @@ vectorizable_load (vec_info *vinfo,
 				  // update_use_array_self(TREE_OPERAND(rhs, 0), vec_array, stmt_info->stmt);
 			  }
 			  else
-				  new_temp = read_vector_array(vinfo, stmt_info, gsi, scalar_dest, vec_array, i);
+				//   new_temp = read_vector_array(vinfo, stmt_info, gsi, scalar_dest, vec_array, i);
+				{
+					tree tmp_mask = NULL_TREE;
+					new_temp = read_vector_array(vinfo, stmt_info, gsi, scalar_dest, vec_array, i, false, tmp_mask);
+				}
 
 			  dr_chain.quick_push(new_temp);
 		  }
@@ -15389,7 +15397,7 @@ vect_transform_stmt (vec_info *vinfo,
       break;
 
     default:
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 		if (flag_task_simd && is_stmt_in_tasksimd_loop(stmt_info->stmt))
 		{
 			gcall *stmt = dyn_cast<gcall *>(stmt_info->stmt);

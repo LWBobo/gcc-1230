@@ -351,10 +351,10 @@ extern void register_pass (register_pass_info *);
 extern void register_pass (opt_pass* pass, pass_positioning_ops pos,
 			   const char* ref_pass_name, int ref_pass_inst_number);
 
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 extern gimple_opt_pass *make_pass_auto_ompclause (gcc::context *ctxt);
 #endif
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 extern gimple_opt_pass * make_pass_manual_vect(gcc::context *ctxt);
 #endif
 extern gimple_opt_pass *make_pass_asan (gcc::context *ctxt);

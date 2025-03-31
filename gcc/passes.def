@@ -44,7 +44,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_expand_omp);
   NEXT_PASS (pass_build_cgraph_edges);
   /* ZHAOCW_20250328_FUNC-SIMD */
-  NEXT_PASS (pass_auto_ompclause)
+  NEXT_PASS (pass_auto_ompclause);
   /* ZHAOCW_20250328_FUNC-SIMD END*/
   TERMINATE_PASS_LIST (all_lowering_passes)
 
@@ -310,9 +310,9 @@ along with GCC; see the file COPYING3.  If not see
 	  NEXT_PASS (pass_if_conversion);
 	  /* pass_vectorize must immediately follow pass_if_conversion.
 	     Please do not add any other passes in between.  */
-     /* ZHAOCW_20250329_TASK-SIMD */
+     /* ZHAOCW_20250329_TASK_SIMD */
      NEXT_PASS (pass_manual_vect);
-     /* ZHAOCW_20250329_TASK-SIMD END */
+     /* ZHAOCW_20250329_TASK_SIMD END */
 	  NEXT_PASS (pass_vectorize);
 	  PUSH_INSERT_PASSES_WITHIN (pass_vectorize)
 	      NEXT_PASS (pass_dce);

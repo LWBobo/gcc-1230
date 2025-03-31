@@ -181,9 +181,9 @@ public:
 
   /* Preferred vectorization factor for the loop if non-zero.  */
   int simdlen;
-  /* ZHAOCW_20250329_TASK-SIMD */ 
+  /* ZHAOCW_20250329_TASK_SIMD */ 
   int tasksimd;
-  /* ZHAOCW_20250329_TASK-SIMD END */
+  /* ZHAOCW_20250329_TASK_SIMD END */
 
   /* Constraints are generally set by consumers and affect certain
      semantics of niter analyzer APIs.  Currently the APIs affected are

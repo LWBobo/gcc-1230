@@ -66,9 +66,9 @@ DEFTIMEVAR (TV_PCH_PTR_SORT          , "PCH pointer sort")
 DEFTIMEVAR (TV_PCH_RESTORE           , "PCH main state restore")
 DEFTIMEVAR (TV_PCH_CPP_RESTORE       , "PCH preprocessor state restore")
 
-/* ZHAOCW_20250328_FUNC-SIMD */
+/* ZHAOCW_20250328_FUNC_SIMD */
 DEFTIMEVAR (TV_AUTO_OMPCLAUSE        , "tree auto ompclause")
-/* ZHAOCW_20250328_FUNC-SIMD END*/
+/* ZHAOCW_20250328_FUNC_SIMD END*/
 DEFTIMEVAR (TV_CGRAPH                , "callgraph construction")
 DEFTIMEVAR (TV_CGRAPHOPT             , "callgraph optimization")
 DEFTIMEVAR (TV_CGRAPH_FUNC_EXPANSION , "callgraph functions expansion")
@@ -205,9 +205,9 @@ DEFTIMEVAR (TV_LOOP_JAM              , "unroll and jam")
 DEFTIMEVAR (TV_COMPLETE_UNROLL       , "complete unrolling")
 DEFTIMEVAR (TV_SCALAR_CLEANUP        , "scalar cleanup")
 DEFTIMEVAR (TV_TREE_PARALLELIZE_LOOPS, "tree parallelize loops")
-/* ZHAOCW_20250329_TASK-SIMD */
+/* ZHAOCW_20250329_TASK_SIMD */
 DEFTIMEVAR (TV_MANUAL_VECT        , "tree manual vect")
-/* ZHAOCW_20250329_TASK-SIMD END */
+/* ZHAOCW_20250329_TASK_SIMD END */
 DEFTIMEVAR (TV_TREE_VECTORIZATION    , "tree vectorization")
 DEFTIMEVAR (TV_TREE_SLP_VECTORIZATION, "tree slp vectorization")
 DEFTIMEVAR (TV_GRAPHITE              , "Graphite")

@@ -81,7 +81,7 @@ extern hashnode ht_lookup (cpp_hash_table *, const unsigned char *,
 extern hashnode ht_lookup_with_hash (cpp_hash_table *, const unsigned char *,
                                      size_t, unsigned int,
                                      enum ht_lookup_option);
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 extern int liull_lookup_with_hash(const unsigned char *str);
 #endif
 inline hashnode ht_lookup (cpp_hash_table *ht, const ht_identifier &id,

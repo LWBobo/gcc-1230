@@ -1288,7 +1288,7 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       pp_right_paren (pp);
       break;
 
-  #ifndef ZHAOCW_20250329_TASK-SIMD
+  #ifndef ZHAOCW_20250329_TASK_SIMD
     case OMP_CLAUSE_TILESIMD:
       pp_string(pp, "tilesimd(");
       dump_generic_node(pp, OMP_CLAUSE_TILESIMD_EXPR(clause),
