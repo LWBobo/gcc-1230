@@ -481,7 +481,7 @@ enum omp_clause_code {
   /* OpenMP clause: safelen (constant-integer-expression).  */
   OMP_CLAUSE_SAFELEN,
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   OMP_CLAUSE_TILESIMD,
   
   OMP_CLAUSE_TASKSIMD,

@@ -1735,6 +1735,7 @@ OBJS = \
 	tree-diagnostic-client-data-hooks.o \
 	tree-dump.o \
 	tree-eh.o \
+	tree-auto-ompclause.o \
 	tree-emutls.o \
 	tree-if-conv.o \
 	tree-inline.o \
@@ -1817,6 +1818,7 @@ OBJS = \
 	tree-vect-slp.o \
 	tree-vect-slp-patterns.o \
 	tree-vectorizer.o \
+	tree-manual-vect.o \
 	tree-vector-builder.o \
 	tree-vrp.o \
 	tree.o \
@@ -3052,7 +3054,7 @@ GTFILES = $(CPPLIB_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(srcdir)/stringpool.cc $(srcdir)/tree.cc $(srcdir)/varasm.cc \
   $(srcdir)/gimple.h \
   $(srcdir)/gimple-ssa.h \
-  $(srcdir)/tree-ssanames.cc $(srcdir)/tree-eh.cc $(srcdir)/tree-ssa-address.cc \
+  $(srcdir)/tree-ssanames.cc $(srcdir)/tree-eh.cc $(srcdir)/tree-auto-ompclause.cc  $(srcdir)/tree-manual-vect.cc  $(srcdir)/tree-ssa-address.cc \
   $(srcdir)/tree-cfg.cc $(srcdir)/tree-ssa-loop-ivopts.cc \
   $(srcdir)/tree-dfa.cc \
   $(srcdir)/tree-iterator.cc $(srcdir)/gimple-expr.cc \

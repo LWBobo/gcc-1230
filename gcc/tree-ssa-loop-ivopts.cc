@@ -8199,7 +8199,7 @@ finish:
 void
 tree_ssa_iv_optimize (void)
 {
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd)
     return;
 #endif

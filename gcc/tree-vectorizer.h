@@ -1809,7 +1809,7 @@ vector_costs::suggested_epilogue_mode () const
 inline bool
 nested_in_vect_loop_p (class loop *loop, stmt_vec_info stmt_info)
 {
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
    if (flag_task_simd)
      return (loop->inner 
             && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father)) 

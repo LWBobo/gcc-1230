@@ -24,7 +24,7 @@ along with this program; see the file COPYING3.  If not see
 #include "cpplib.h"
 #include "internal.h"
 
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 #include "omp_global.h"
 bool parser_omp_clause = false;
 char extern_omp_clause[500];
@@ -4337,13 +4337,17 @@ _cpp_lex_direct (cpp_reader *pfile)
     case ')': result->type = CPP_CLOSE_PAREN; break;
     case '[': result->type = CPP_OPEN_SQUARE; break;
     case ']': result->type = CPP_CLOSE_SQUARE; break;
-  #ifndef ZHAOCW_20250328_FUNC-SIMD
+  #ifndef ZHAOCW_20250328_FUNC_SIMD
     case '{': 
     {
       result->type = CPP_OPEN_BRACE;
       if(parser_omp_clause)
       {
+#ifdef ZHAOCW_20250330_Fix        
         int len = liull_lookup_with_hash (buffer->cur - 1);
+#else
+        int __attribute__((unused)) len = liull_lookup_with_hash(buffer->cur - 1);
+#endif
       }
       break;
     }

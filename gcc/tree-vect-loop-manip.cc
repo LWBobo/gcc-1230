@@ -2038,7 +2038,7 @@ bool
 slpeel_can_duplicate_loop_p (const class loop *loop, const_edge exit_e,
 			     const_edge e)
 {
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd && loop->tasksimd ==1)
     return true;
 #endif

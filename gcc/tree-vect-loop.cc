@@ -764,9 +764,13 @@ vect_analyze_scalar_cycles (loop_vec_info loop_vinfo, bool slp)
 
   if (loop->inner)
     vect_analyze_scalar_cycles_1 (loop_vinfo, loop->inner, slp);
-#ifndef liull202411
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd && loop->inner && loop->inner->next)
+  #ifdef ZHAOCW_20250330_FIX
     vect_analyze_scalar_cycles_1(loop_vinfo, loop->inner->next);
+  #else
+    vect_analyze_scalar_cycles_1(loop_vinfo, loop->inner->next, slp);
+  #endif
 #endif
 }
 
@@ -1825,7 +1829,7 @@ vect_analyze_loop_form (class loop *loop, gimple *loop_vectorized_call,
 	 The inner-loop also has the properties expected of inner-most loops
 	 as described above.  */
 
-   #ifndef ZHAOCW_20250329_TASK-SIMD
+   #ifndef ZHAOCW_20250329_TASK_SIMD
    entryedge = loop_preheader_edge(innerloop);
 
    if (!flag_task_simd || (flag_task_simd && loop->tasksimd != 1))
@@ -2015,7 +2019,7 @@ vect_create_loop_vinfo (class loop *loop, vec_info_shared *shared,
 	LOOP_VINFO_INNER_LOOP_COST_FACTOR (loop_vinfo)
 	  = wi::smin (nit, param_vect_inner_loop_cost_factor).to_uhwi ();
     }
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
     if (flag_task_simd && loop->inner && loop->inner->next)
     {
       // gcond *inner_next_cond = get_loop_exit_condition(loop->inner->next)
@@ -2259,7 +2263,7 @@ vect_analyze_loop_operations (loop_vec_info loop_vinfo)
 					      -1, false, &cost_vec);
 
           if (!ok)
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
             if (flag_task_vect)
               return opt_result::success();
             else
@@ -2548,7 +2552,7 @@ vect_analyze_loop_costing (loop_vec_info loop_vinfo,
   return 1;
 }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 // 获取语句是否位于嵌套循环中
 static bool is_loop_in_tasksimd_loop(loop_p loop)
 {
@@ -2631,7 +2635,7 @@ vect_get_datarefs_in_loop (loop_p loop, basic_block *bbs,
 					 && get_base_address (op)))))
 			  continue;
 		      }
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
           if (flag_task_simd && is_loop_in_tasksimd_loop(loop))
           {
             const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fndecl));
@@ -3659,7 +3663,7 @@ vect_analyze_loop (class loop *loop, gimple *loop_vectorized_call,
       && LOOP_VINFO_VECTORIZABLE_P (loop_vec_info_for_loop (loop_outer (loop))))
     return opt_loop_vec_info::failure_at (vect_location,
 					  "outer-loop already vectorized.\n");
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (!flag_task_simd || (flag_task_simd && !is_loop_in_tasksimd_loop(loop)))
     if (!find_loop_nest(loop, &shared->loop_nest))
       return opt_loop_vec_info::failure_at(vect_location,
@@ -3667,7 +3671,11 @@ vect_analyze_loop (class loop *loop, gimple *loop_vectorized_call,
                                            " loops cannot be vectorized\n");
   /* Analyze the loop form.  */
   vect_loop_form_info loop_form_info;
+#ifdef ZHAOCW_20250330_FIX
   opt_result res = vect_analyze_loop_form(loop, &loop_form_info);
+#else
+  opt_result res = vect_analyze_loop_form(loop, NULL, &loop_form_info);
+#endif
   if (!flag_task_simd)
   {
     if (!res)
@@ -9917,7 +9925,7 @@ vect_can_vectorize_without_simd_p (code_helper code)
 	  && vect_can_vectorize_without_simd_p (tree_code (code)));
 }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 static inline bool
 nested_in_vect_loop_p_self(class loop *loop, stmt_vec_info stmt_info)
 {
@@ -10567,7 +10575,7 @@ vectorizable_induction (loop_vec_info loop_vinfo,
   gcc_assert (ncopies >= 1);
 
   /* FORNOW. These restrictions should be relaxed.  */
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (nested_in_vect_loop_p_self(loop, stmt_info))
 #else
   if (nested_in_vect_loop_p (loop, stmt_info))
@@ -10617,7 +10625,7 @@ vectorizable_induction (loop_vec_info loop_vinfo,
 	}
 
       nested_in_vect_loop = true;
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
       if (flag_task_simd)
       {
         if (loop->inner && (loop->inner == (gimple_bb(stmt_info->stmt))->loop_father))
@@ -10635,7 +10643,7 @@ vectorizable_induction (loop_vec_info loop_vinfo,
     }
   else
     iv_loop = loop;
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
   if (!flag_task_simd)
     gcc_assert(iv_loop == (gimple_bb(phi))->loop_father);
 #else

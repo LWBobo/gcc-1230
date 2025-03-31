@@ -28,7 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
 #include "c-family/c-common.h"
 #endif
 
@@ -63,7 +63,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-fold.h"
 #include "optabs-query.h"
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 #include "langhooks.h"
 #include "diagnostic.h"
 
@@ -3382,7 +3382,7 @@ vect_analyze_group_access (vec_info *vinfo, dr_vec_info *dr_info)
   return true;
 }
 
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
 // 获取语句是否位于嵌套循环中
 static bool is_loop_in_tasksimd_loop(loop_p loop)
 {
@@ -3422,7 +3422,7 @@ static bool
 vect_analyze_data_ref_access (vec_info *vinfo, dr_vec_info *dr_info)
 {
   data_reference *dr = dr_info->dr;
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd)
   {
     tree step00 = build_int_cst(NULL_TREE, 8); // 将步长设置为4
@@ -3455,7 +3455,7 @@ vect_analyze_data_ref_access (vec_info *vinfo, dr_vec_info *dr_info)
       DR_GROUP_FIRST_ELEMENT (stmt_info) = NULL;
       DR_GROUP_NEXT_ELEMENT (stmt_info) = NULL;
       if (!nested_in_vect_loop_p (loop, stmt_info))
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
       if (flag_task_simd && is_loop_in_tasksimd_loop(loop))
         return true;
       else
@@ -5646,7 +5646,7 @@ vect_create_data_ref_ptr (vec_info *vinfo, stmt_vec_info stmt_info,
 	}
       while (sinfo);
     }
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
   if (flag_task_simd)
   {
 #define long_long_integer_type_node integer_types[itk_long_long]
@@ -5762,7 +5762,7 @@ vect_create_data_ref_ptr (vec_info *vinfo, stmt_vec_info stmt_info,
       /* Accesses to invariant addresses should be handled specially
 	 by the caller.  */
       tree step = vect_dr_behavior (vinfo, dr_info)->step;
-#ifndef ZHAOCW_20250329_TASK-SIMD
+#ifndef ZHAOCW_20250329_TASK_SIMD
       if (!flag_task_simd 
         || (flag_task_simd && !is_loop_in_tasksimd_loop(loop)))
         gcc_assert(!integer_zerop(step));

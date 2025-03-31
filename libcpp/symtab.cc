@@ -22,7 +22,7 @@ along with this program; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "symtab.h"
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 #include "omp_global.h"
 #endif
 /* The code below is a specialization of Vladimir Makarov's expandable
@@ -97,12 +97,16 @@ ht_lookup (cpp_hash_table *table, const unsigned char *str, size_t len,
 			      insert);
 }
 
-#ifndef ZHAOCW_20250328_FUNC-SIMD
+#ifndef ZHAOCW_20250328_FUNC_SIMD
 int
 liull_lookup_with_hash(const unsigned char *str)
 {
   const unsigned char *cur;
+#ifdef ZHAOCW_20250330_Fix
   unsigned int len;
+#else
+  unsigned int __attribute__((unused)) len;
+#endif
   // unsigned char ss[100];
   int i = 0;
   cur = str;

@@ -882,7 +882,7 @@ public:
 unsigned int
 pass_dominator::execute (function *fun)
 {
-#ifdef ZHAOCW_20250329_TASK-SIMD
+#ifdef ZHAOCW_20250329_TASK_SIMD
 	if (flag_task_simd)
 		return 1;
 #endif
