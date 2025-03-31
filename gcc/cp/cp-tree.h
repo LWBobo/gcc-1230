@@ -7692,6 +7692,7 @@ extern tree fn_type_unification			(tree, tree, tree,
 						 tree, unification_kind_t, int,
 						 struct conversion **,
 						 bool, bool);
+extern void setup_explicit_instantiation_definition_linkage (tree);
 extern void mark_decl_instantiated		(tree, int);
 extern int more_specialized_fn			(tree, tree, int);
 extern tree type_targs_deducible_from		(tree, tree);
@@ -8055,6 +8056,7 @@ extern tree omp_reduction_id			(enum tree_code, tree, tree);
 extern tree cp_remove_omp_priv_cleanup_stmt	(tree *, int *, void *);
 extern bool cp_check_omp_declare_reduction	(tree);
 extern void finish_omp_declare_simd_methods	(tree);
+extern tree cp_finish_omp_init_prefer_type	(tree);
 extern tree finish_omp_clauses			(tree, enum c_omp_region_type);
 extern tree push_omp_privatization_clauses	(bool);
 extern void pop_omp_privatization_clauses	(tree);
@@ -8623,6 +8625,7 @@ extern void mangle_module_substitution		(int);
 extern int mangle_module_component		(tree id, bool partition);
 extern tree mangle_module_global_init		(int);
 extern unsigned HOST_WIDE_INT range_expr_nelts	(tree);
+extern bool equal_abi_tags			(tree, tree);
 
 /* in dump.cc */
 extern bool cp_dump_tree			(void *, tree);

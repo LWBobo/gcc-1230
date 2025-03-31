@@ -1571,7 +1571,11 @@
    "TARGET_AVX512VL || <MODE_SIZE> == 64"
    "vpternlogd\t{$0xFF, %0, %0, %0|%0, %0, %0, 0xFF}"
   [(set_attr "type" "sselog1")
-   (set_attr "prefix" "evex")])
+   (set_attr "prefix" "evex")
+   (set (attr "mode")
+        (if_then_else (match_test "TARGET_AVX512VL")
+		      (const_string "<sseinsnmode>")
+		      (const_string "XI")))])
 
 ;; If mem_addr points to a memory region with less than whole vector size bytes
 ;; of accessible memory and k is a mask that would prevent reading the inaccessible
@@ -11904,7 +11908,7 @@
 	   ]
 	   (const_string "ssemov")))
    (set (attr "addr")
-     (if_then_else (eq_attr "alternative" "8,9")
+     (if_then_else (eq_attr "alternative" "9,10")
 		   (const_string "gpr16")
 		   (const_string "*")))
    (set (attr "prefix_extra")
@@ -20173,6 +20177,7 @@
   return "vshuf<shuffletype>64x2\t{%3, %2, %1, %0<mask_operand7>|%0<mask_operand7>, %1, %2, %3}";
 }
   [(set_attr "type" "sselog")
+   (set_attr "addr" "gpr16,*")
    (set_attr "length_immediate" "1")
    (set_attr "prefix" "evex")
    (set_attr "mode" "XI")])
@@ -20334,6 +20339,7 @@
   return "vshuf<shuffletype>32x4\t{%3, %2, %1, %0<mask_operand11>|%0<mask_operand11>, %1, %2, %3}";
 }
   [(set_attr "type" "sselog")
+   (set_attr "addr" "gpr16,*")
    (set_attr "length_immediate" "1")
    (set_attr "prefix" "evex")
    (set_attr "mode" "<sseinsnmode>")])
@@ -24076,6 +24082,7 @@
   "TARGET_AVX2"
   "vpblendd\t{%3, %2, %1, %0|%0, %1, %2, %3}"
   [(set_attr "type" "ssemov")
+   (set_attr "addr" "gpr16")
    (set_attr "prefix_extra" "1")
    (set_attr "length_immediate" "1")
    (set_attr "prefix" "vex")
@@ -27085,7 +27092,7 @@
    vaesenc\t{%2, %1, %0|%0, %1, %2}"
   [(set_attr "isa" "noavx,avx,vaes_avx512vl")
    (set_attr "type" "sselog1")
-   (set_attr "addr" "gpr16,*,*")
+   (set_attr "addr" "gpr16,gpr16,*")
    (set_attr "prefix_extra" "1")
    (set_attr "prefix" "orig,maybe_evex,evex")
    (set_attr "btver2_decode" "double,double,double")
@@ -27103,7 +27110,7 @@
    vaesenclast\t{%2, %1, %0|%0, %1, %2}"
   [(set_attr "isa" "noavx,avx,vaes_avx512vl")
    (set_attr "type" "sselog1")
-   (set_attr "addr" "gpr16,*,*")
+   (set_attr "addr" "gpr16,gpr16,*")
    (set_attr "prefix_extra" "1")
    (set_attr "prefix" "orig,maybe_evex,evex")
    (set_attr "btver2_decode" "double,double,double")
@@ -27121,7 +27128,7 @@
    vaesdec\t{%2, %1, %0|%0, %1, %2}"
   [(set_attr "isa" "noavx,avx,vaes_avx512vl")
    (set_attr "type" "sselog1")
-   (set_attr "addr" "gpr16,*,*")
+   (set_attr "addr" "gpr16,gpr16,*")
    (set_attr "prefix_extra" "1")
    (set_attr "prefix" "orig,maybe_evex,evex")
    (set_attr "btver2_decode" "double,double,double") 
@@ -27138,7 +27145,7 @@
    * return TARGET_AES ? \"vaesdeclast\t{%2, %1, %0|%0, %1, %2}\" : \"%{evex%} vaesdeclast\t{%2, %1, %0|%0, %1, %2}\";
    vaesdeclast\t{%2, %1, %0|%0, %1, %2}"
   [(set_attr "isa" "noavx,avx,vaes_avx512vl")
-   (set_attr "addr" "gpr16,*,*")
+   (set_attr "addr" "gpr16,gpr16,*")
    (set_attr "type" "sselog1")
    (set_attr "prefix_extra" "1")
    (set_attr "prefix" "orig,maybe_evex,evex")
@@ -30841,7 +30848,8 @@
     return "%{evex%} vaesdec\t{%2, %1, %0|%0, %1, %2}";
   else
     return "vaesdec\t{%2, %1, %0|%0, %1, %2}";
-})
+}
+[(set_attr "addr" "gpr16,*")])
 
 (define_insn "vaesdeclast_<mode>"
   [(set (match_operand:VI1_AVX512VL_F 0 "register_operand" "=x,v")
@@ -30855,7 +30863,8 @@
     return "%{evex%} vaesdeclast\t{%2, %1, %0|%0, %1, %2}";
   else
     return "vaesdeclast\t{%2, %1, %0|%0, %1, %2}";
-})
+}
+[(set_attr "addr" "gpr16,*")])
 
 (define_insn "vaesenc_<mode>"
   [(set (match_operand:VI1_AVX512VL_F 0 "register_operand" "=x,v")
@@ -30869,7 +30878,8 @@
     return "%{evex%} vaesenc\t{%2, %1, %0|%0, %1, %2}";
   else
     return "vaesenc\t{%2, %1, %0|%0, %1, %2}";
-})
+}
+[(set_attr "addr" "gpr16,*")])
 
 (define_insn "vaesenclast_<mode>"
   [(set (match_operand:VI1_AVX512VL_F 0 "register_operand" "=x,v")
@@ -30883,7 +30893,8 @@
     return "%{evex%} vaesenclast\t{%2, %1, %0|%0, %1, %2}";
   else
     return "vaesenclast\t{%2, %1, %0|%0, %1, %2}";
-})
+}
+[(set_attr "addr" "gpr16,*")])
 
 (define_insn "vpclmulqdq_<mode>"
   [(set (match_operand:VI8_FVL 0 "register_operand" "=v")
@@ -31330,7 +31341,8 @@
 	(unspec_volatile:CCZ [(match_dup 1) (match_dup 2)] AESDECENCKL))]
   "TARGET_KL"
   "aes<aesklvariant>\t{%2, %0|%0, %2}"
-  [(set_attr "type" "other")])
+  [(set_attr "type" "other")
+   (set_attr "addr" "gpr16")])
 
 (define_int_iterator AESDECENCWIDEKL
   [UNSPECV_AESDECWIDE128KLU8  UNSPECV_AESDECWIDE256KLU8
@@ -31392,7 +31404,8 @@
 	    AESDECENCWIDEKL))])]
   "TARGET_WIDEKL"
   "aes<aeswideklvariant>\t%0"
-  [(set_attr "type" "other")])
+  [(set_attr "type" "other")
+   (set_attr "addr" "gpr16")])
 
 ;; Modes handled by broadcast patterns.  NB: Allow V64QI and V32HI with
 ;; TARGET_AVX512F since ix86_expand_vector_init_duplicate can expand

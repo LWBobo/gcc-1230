@@ -1,3 +1,250 @@
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	* doc/extend.texi (New/Delete Builtins): Cleanup up the text and
+	explicitly list the builtins being documented.
+
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	PR other/42270
+	* doc/extend.texi (Numeric Builtins): Move Integer Overflow Builtins
+	section here, as a subsection.
+
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	PR other/42270
+	* doc/extend.texi (Atomic Memory Access): New section.
+	(__sync Builtins): Make it a subsection of the above.
+	(Atomic Memory Access): Likewise.
+	(x86 specific memory model extensions for transactional memory):
+	Delete this section, incorporating the text into the discussion
+	of __atomic builtins.
+
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	PR other/42270
+	* doc/extend.texi (Built-in Functions): Incorporate some text
+	formerly in "Other Builtins" into the introduction.  Adjust
+	menu for new sections.
+	(Library Builtins): New section, split from "Other Builtins".
+	(Numeric Builtins): Likewise.
+	(Stack Allocation): Likewise.
+	(Constructing Calls): Move __builtin_call_with_static_chain here.
+	(Object Size Checking): Minor copy-editing.
+	(Other Builtins): Move text to new sections listed above.  Delete
+	duplicate docs for object-size checking builtins.
+	* doc/invoke.texi (C dialect options): Update @xref for -fno-builtin.
+
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	PR other/42270
+	* doc/extend.texi (C Extensions): Move menu items for
+	builtin-related sections to...
+	(Built-in Functions): New chapter.
+	* doc/gcc.texi (Introduction): Add menu entry for new chapter.
+
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	PR other/42270
+	* doc/extend.texi (Attributes): New section.
+	(Function Attributes): Make it a subsection of the new section.
+	(Variable Attributes): Likewise.
+	(Type Attributes): Likewise.
+	(Label Attributes): Likewise.
+	(Enumerator Attributes): Likewise.
+	(Attribute Syntax): Likewise.
+
+2025-03-30  Sandra Loosemore  <sloosemore@baylibre.com>
+
+	PR other/42270
+	* doc/extend.texi (Function Attributes): Merge text from "Target
+	Format Checks" into the main discussion of the format and
+	format_arg attributes.
+	(Target Format Checks): Delete section.
+
+2025-03-30  Maciej W. Rozycki  <macro@orcam.me.uk>
+
+	PR target/117759
+	* config/alpha/alpha-protos.h
+	(alpha_expand_unaligned_store_safe_partial): New prototype.
+	* config/alpha/alpha.cc (alpha_expand_movmisalign)
+	(alpha_expand_block_move, alpha_expand_block_clear): Handle
+	TARGET_SAFE_PARTIAL.
+	(alpha_expand_unaligned_store_safe_partial)
+	(alpha_expand_unaligned_store_words_safe_partial)
+	(alpha_expand_clear_safe_partial_nobwx): New functions.
+	* config/alpha/alpha.md (insvmisaligndi): Handle
+	TARGET_SAFE_PARTIAL.
+	* config/alpha/alpha.opt (msafe-partial): New option.
+	* config/alpha/alpha.opt.urls: Regenerate.
+	* doc/invoke.texi (Option Summary, DEC Alpha Options): Document
+	the new option.
+
+2025-03-30  Maciej W. Rozycki  <macro@orcam.me.uk>
+
+	PR target/117759
+	* config/alpha/alpha-modes.def (OI): New integer mode.
+	* config/alpha/alpha-protos.h (alpha_expand_mov_safe_bwa): New
+	prototype.
+	* config/alpha/alpha.cc (alpha_expand_mov_safe_bwa): New
+	function.
+	(alpha_secondary_reload): Handle TARGET_SAFE_BWA.
+	* config/alpha/alpha.md (aligned_store_safe_bwa)
+	(unaligned_store<mode>_safe_bwa, reload_out<mode>_safe_bwa)
+	(reload_out<mode>_unaligned_safe_bwa): New expanders.
+	(mov<mode>, movcqi, reload_out<mode>_aligned): Handle
+	TARGET_SAFE_BWA.
+	(reload_out<mode>): Guard against TARGET_SAFE_BWA.
+	* config/alpha/alpha.opt (msafe-bwa): New option.
+	* config/alpha/alpha.opt.urls: Regenerate.
+	* doc/invoke.texi (Option Summary, DEC Alpha Options): Document
+	the new option.
+
+2025-03-30  Maciej W. Rozycki  <macro@orcam.me.uk>
+
+	* function.h (struct function): Add
+	`split_basic_blocks_after_reload' member.
+	* lra.cc (lra): Handle it.
+	* reload1.cc (reload): Likewise.
+
+2025-03-30  Maciej W. Rozycki  <macro@orcam.me.uk>
+
+	* config/alpha/alpha-protos.h (alpha_emit_unlikely_jump): New
+	prototype.
+	* config/alpha/alpha.cc (emit_unlikely_jump): Rename to...
+	(alpha_emit_unlikely_jump): ... this.  Return the insn emitted.
+	(alpha_split_atomic_op, alpha_split_compare_and_swap)
+	(alpha_split_compare_and_swap_12, alpha_split_atomic_exchange)
+	(alpha_split_atomic_exchange_12): Update call sites accordingly.
+
+2025-03-30  LIU Hao  <lh_mouse@126.com>
+
+	* config/mingw/winnt.cc (mingw_pe_file_end): Add `.p2align`.
+
+2025-03-29  Iain Sandoe  <iain@sandoe.co.uk>
+
+	PR cobol/119283
+	* config.in: Regenerate.
+	* configure: Regenerate.
+	* configure.ac: Check for host memrchr.
+
+2025-03-29  Lulu Cheng  <chenglulu@loongson.cn>
+
+	* doc/invoke.texi: Modify the description of '-mld-seq-sa'.
+
+2025-03-29  Lulu Cheng  <chenglulu@loongson.cn>
+
+	* config/loongarch/loongarch-def.cc
+	(la464_align): Add settings for labels.
+	(la664_align): Likewise.
+	* config/loongarch/loongarch-opts.cc
+	(loongarch_target_option_override): Likewise.
+	* config/loongarch/loongarch-tune.h
+	(struct loongarch_align): Implement the function `label_`.
+
+2025-03-28  Jakub Jelinek  <jakub@redhat.com>
+
+	* common.opt.urls: Regenerate.
+
+2025-03-28  Jakub Jelinek  <jakub@redhat.com>
+
+	* Makefile.in (gcc.srcextra): Use sed to turn .../gcc/gengtype-lex.l
+	in #line directives into just gengtype-lex.l.
+
+2025-03-28  Andrew MacLeod  <amacleod@redhat.com>
+
+	* range-op.cc (operator_mult::op1_range): If the LHS does not
+	contain zero, return non-zero.
+
+2025-03-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/119483
+	* tree-tailcall.cc (find_tail_calls): Handle noreturn musttail
+	calls.
+	(eliminate_tail_call): Likewise.
+	(tree_optimize_tail_calls_1): If cfun->has_musttail and
+	diag_musttail, handle also basic blocks with no successors
+	with noreturn musttail calls.
+	* calls.cc (can_implement_as_sibling_call_p): Allow ECF_NORETURN
+	calls if they are musttail calls.
+
+2025-03-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR ipa/119484
+	* ipa-sra.cc (isra_analyze_call): Don't set m_return_ignored if
+	gimple_call_must_tail_p even if it doesn't have lhs.
+
+2025-03-28  Richard Biener  <rguenther@suse.de>
+
+	* fold-const.h (native_encode_real): Export.
+	* fold-const.cc (native_encode_real): Change API to take
+	mode and REAL_VALUE_TYPE.
+	(native_encode_expr): Adjust.
+
+2025-03-27  Uros Bizjak  <ubizjak@gmail.com>
+
+	* config/i386/i386.cc (ix86_redzone_clobber): Use integer, not rtx
+	as the third argument of plus_constant.
+
+2025-03-27  Richard Biener  <rguenther@suse.de>
+
+	PR target/119010
+	* config/i386/zn4zn5.md (znver4_insn_both, znver5_insn_both):
+	New reservation for ALU ops with load and store.
+
+2025-03-27  Richard Biener  <rguenther@suse.de>
+
+	PR target/119010
+	* config/i386/zn4zn5.md (znver4_sse_add, znver4_sse_add_load,
+	znver5_sse_add_load, znver4_sse_add1, znver4_sse_add1_load,
+	znver5_sse_add1_load, znver4_sse_mul, znver4_sse_mul_load,
+	znver5_sse_mul_load, znver4_sse_cvt, znver4_sse_cvt_load,
+	znver5_sse_cvt_load, znver4_sse_shuf, znver5_sse_shuf,
+	znver4_sse_shuf_load, znver5_sse_shuf_load,
+	znver4_sse_cmp_avx128, znver5_sse_cmp_avx128,
+	znver4_sse_cmp_avx128_load, znver5_sse_cmp_avx128_load):
+	Also handle DFmode.
+	(znver4_sse_muladd_load, znver5_sse_muladd_load): Use
+	ssemuladd type.
+
+2025-03-27  Tobias Burnus  <tburnus@baylibre.com>
+
+	* gimplify.cc (modify_call_for_omp_dispatch): Remove sorry.
+
+2025-03-27  Richard Earnshaw  <rearnsha@arm.com>
+
+	* config/arm/neon.md (<fmaxmin><mode>3): Move pattern from here...
+	* config/arm/vec-common.md (<fmaxmin><mode>3): ... to here.  Convert
+	to define_expand and disable the pattern when denormal values might
+	get truncated to zero.  Iterate on VF to add V4HF and V8HF variants.
+
+2025-03-27  Hu, Lin1  <lin1.hu@intel.com>
+
+	PR target/119425
+	* config/i386/sse.md:
+	(vec_set<mode>_0): Set the alternative with constraint "jm"'s
+	attribute "addr" to "gpr16".
+	(<mask_codefor>avx512dq_shuf_<shuffletype>64x2_1<mask_name>):
+	Ditto.
+	(avx512vl_shuf_<shuffletype>32x4_1<mask_name>): Ditto.
+	(avx2_pblendd<mode>): Ditto.
+	(aesenc): Ditto.
+	(aesenclast): Ditto.
+	(aesdec): Ditto.
+	(aesdeclast): Ditto.
+	(vaesdec_<mode>): Ditto.
+	(vaesdeclast_<mode>): Ditto.
+	(vaesenc_<mode>):: Ditto.
+	(vaesenclast_<mode>):: Ditto.
+	(aes<aesklvariant>u8): Ditto.
+	(*aes<aeswideklvariant>u8): Ditto.
+
+2025-03-27  Lulu Cheng  <chenglulu@loongson.cn>
+
+	PR target/119408
+	* config/loongarch/loongarch.cc
+	(loongarch_c_mode_for_suffix): New.
+	(TARGET_C_MODE_FOR_SUFFIX): Define.
+
 2025-03-26  Jørgen Kvalsvik  <j@lambda.is>
 
 	* builtins.cc (expand_builtin_fork_or_exec): Call

@@ -12134,13 +12134,18 @@ tsubst_attribute (tree t, tree *decl_p, tree args,
       location_t match_loc = cp_expr_loc_or_input_loc (TREE_PURPOSE (chain));
       tree ctx = copy_list (TREE_VALUE (val));
       tree append_args_list = TREE_CHAIN (TREE_CHAIN (chain));
-      if (append_args_list && TREE_VALUE (append_args_list))
+      if (append_args_list
+	  && TREE_VALUE (append_args_list)
+	  && TREE_CHAIN (TREE_VALUE (append_args_list)))
 	{
-	  append_args_list = TREE_VALUE (TREE_VALUE (append_args_list));
+	  append_args_list = TREE_VALUE (append_args_list);
+	  append_args_list = TREE_VALUE (TREE_CHAIN (append_args_list));
 	  for (; append_args_list;
 	       append_args_list = TREE_CHAIN (append_args_list))
 	     {
 	      tree pref_list = TREE_VALUE (append_args_list);
+	      if (pref_list == NULL_TREE || TREE_CODE (pref_list) != TREE_LIST)
+		continue;
 	      tree fr_list = TREE_VALUE (pref_list);
 	      int len = TREE_VEC_LENGTH (fr_list);
 	      for (int i = 0; i < len; i++)
@@ -25963,6 +25968,23 @@ mark_definable (tree decl)
     DECL_NOT_REALLY_EXTERN (clone) = 1;
 }
 
+/* DECL is an explicit instantiation definition, ensure that it will
+   be written out here and that it won't clash with other instantiations
+   in other translation units.  */
+
+void
+setup_explicit_instantiation_definition_linkage (tree decl)
+{
+  mark_definable (decl);
+  mark_needed (decl);
+  /* Always make artificials weak.  */
+  if (DECL_ARTIFICIAL (decl) && flag_weak)
+    comdat_linkage (decl);
+  /* We also want to put explicit instantiations in linkonce sections.  */
+  else if (TREE_PUBLIC (decl))
+    maybe_make_one_only (decl);
+}
+
 /* Called if RESULT is explicitly instantiated, or is a member of an
    explicitly instantiated class.  */
 
@@ -26000,16 +26022,8 @@ mark_decl_instantiated (tree result, int extern_p)
     }
   else
     {
-      mark_definable (result);
-      mark_needed (result);
       set_instantiating_module (result);
-      /* Always make artificials weak.  */
-      if (DECL_ARTIFICIAL (result) && flag_weak)
-	comdat_linkage (result);
-      /* For WIN32 we also want to put explicit instantiations in
-	 linkonce sections.  */
-      else if (TREE_PUBLIC (result))
-	maybe_make_one_only (result);
+      setup_explicit_instantiation_definition_linkage (result);
       if (TREE_CODE (result) == FUNCTION_DECL
 	  && DECL_TEMPLATE_INSTANTIATED (result))
 	/* If the function has already been instantiated, clear DECL_EXTERNAL,

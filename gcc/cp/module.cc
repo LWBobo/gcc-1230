@@ -3012,6 +3012,7 @@ public:
   bool read_definition (tree decl);
 
 private:
+  void check_abi_tags (tree existing, tree decl, tree &eattr, tree &dattr);
   bool is_matching_decl (tree existing, tree decl, bool is_typedef);
   static bool install_implicit_member (tree decl);
   bool read_function_def (tree decl, tree maybe_template);
@@ -8832,8 +8833,11 @@ trees_in::decl_value ()
 	  tree etype = TREE_TYPE (existing);
 
 	  /* Handle separate declarations with different attributes.  */
+	  tree &dattr = TYPE_ATTRIBUTES (type);
 	  tree &eattr = TYPE_ATTRIBUTES (etype);
-	  eattr = merge_attributes (eattr, TYPE_ATTRIBUTES (type));
+	  check_abi_tags (existing, decl, eattr, dattr);
+	  // TODO: handle other conflicting type attributes
+	  eattr = merge_attributes (eattr, dattr);
 
 	  /* When merging a partial specialisation, the existing decl may have
 	     had its TYPE_CANONICAL adjusted.  If so we should use structural
@@ -12011,6 +12015,51 @@ trees_in::binfo_mergeable (tree *type)
   return u ();
 }
 
+/* DECL is a just streamed declaration with attributes DATTR that should
+   have matching ABI tags as EXISTING's attributes EATTR.  Check that the
+   ABI tags match, and report an error if not.  */
+
+void
+trees_in::check_abi_tags (tree existing, tree decl, tree &eattr, tree &dattr)
+{
+  tree etags = lookup_attribute ("abi_tag", eattr);
+  tree dtags = lookup_attribute ("abi_tag", dattr);
+  if ((etags == nullptr) != (dtags == nullptr)
+      || (etags && !attribute_value_equal (etags, dtags)))
+    {
+      if (etags)
+	etags = TREE_VALUE (etags);
+      if (dtags)
+	dtags = TREE_VALUE (dtags);
+
+      /* We only error if mangling wouldn't consider the tags equivalent.  */
+      if (!equal_abi_tags (etags, dtags))
+	{
+	  auto_diagnostic_group d;
+	  if (dtags)
+	    error_at (DECL_SOURCE_LOCATION (decl),
+		      "mismatching abi tags for %qD with tags %qE",
+		      decl, dtags);
+	  else
+	    error_at (DECL_SOURCE_LOCATION (decl),
+		      "mismatching abi tags for %qD with no tags", decl);
+	  if (etags)
+	    inform (DECL_SOURCE_LOCATION (existing),
+		    "existing declaration here with tags %qE", etags);
+	  else
+	    inform (DECL_SOURCE_LOCATION (existing),
+		    "existing declaration here with no tags");
+	}
+
+      /* Always use the existing abi_tags as the canonical set so that
+	 later processing doesn't get confused.  */
+      if (dtags)
+	dattr = remove_attribute ("abi_tag", dattr);
+      if (etags)
+	duplicate_one_attribute (&dattr, eattr, "abi_tag");
+    }
+}
+
 /* DECL is a just streamed mergeable decl that should match EXISTING.  Check
    it does and issue an appropriate diagnostic if not.  Merge any
    bits from DECL to EXISTING.  This is stricter matching than
@@ -12221,6 +12270,10 @@ trees_in::is_matching_decl (tree existing, tree decl, bool is_typedef)
     }
   if (!DECL_EXTERNAL (d_inner))
     DECL_EXTERNAL (e_inner) = false;
+
+  if (VAR_OR_FUNCTION_DECL_P (d_inner))
+    check_abi_tags (existing, decl,
+		    DECL_ATTRIBUTES (e_inner), DECL_ATTRIBUTES (d_inner));
 
   if (TREE_CODE (decl) == TEMPLATE_DECL)
     {
@@ -12684,6 +12737,9 @@ trees_in::read_var_def (tree decl, tree maybe_template)
 	  if (maybe_dup && DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (maybe_dup))
 	    DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (decl) = true;
 	  tentative_decl_linkage (decl);
+	  if (DECL_EXPLICIT_INSTANTIATION (decl)
+	      && !DECL_EXTERNAL (decl))
+	    setup_explicit_instantiation_definition_linkage (decl);
 	  if (DECL_IMPLICIT_INSTANTIATION (decl)
 	      || (DECL_EXPLICIT_INSTANTIATION (decl)
 		  && !DECL_EXTERNAL (decl))
@@ -16604,6 +16660,12 @@ module_state::read_cluster (unsigned snum)
       cfun->language->returns_abnormally = pdata.returns_abnormally;
       cfun->language->infinite_loop = pdata.infinite_loop;
 
+      /* Make sure we emit explicit instantiations.
+	 FIXME do we want to do this in expand_or_defer_fn instead?  */
+      if (DECL_EXPLICIT_INSTANTIATION (decl)
+	  && !DECL_EXTERNAL (decl))
+	setup_explicit_instantiation_definition_linkage (decl);
+
       if (abstract)
 	;
       else if (DECL_MAYBE_IN_CHARGE_CDTOR_P (decl))
@@ -20371,20 +20433,24 @@ get_originating_module_decl (tree decl)
   return decl;
 }
 
+/* If DECL is imported, return which module imported it, or 0 for the current
+   module.  Except that if GLOBAL_M1, return -1 for decls attached to the
+   global module.  */
+
 int
-get_originating_module (tree decl, bool for_mangle)
+get_originating_module (tree decl, bool global_m1)
 {
   tree owner = get_originating_module_decl (decl);
   tree not_tmpl = STRIP_TEMPLATE (owner);
 
   if (!DECL_LANG_SPECIFIC (not_tmpl))
-    return for_mangle ? -1 : 0;
+    return global_m1 ? -1 : 0;
 
-  if (for_mangle && !DECL_MODULE_ATTACH_P (not_tmpl))
+  if (global_m1 && !DECL_MODULE_ATTACH_P (not_tmpl))
     return -1;
 
   int mod = !DECL_MODULE_IMPORT_P (not_tmpl) ? 0 : get_importing_module (owner);
-  gcc_checking_assert (!for_mangle || !(*modules)[mod]->is_header ());
+  gcc_checking_assert (!global_m1 || !(*modules)[mod]->is_header ());
   return mod;
 }
 

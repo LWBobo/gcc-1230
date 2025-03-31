@@ -991,6 +991,7 @@ Objective-C and Objective-C++ Dialects}.
 -mtrap-precision=@var{mode}  -mbuild-constants
 -mcpu=@var{cpu-type}  -mtune=@var{cpu-type}
 -mbwx  -mmax  -mfix  -mcix
+-msafe-bwa  -msafe-partial
 -mfloat-vax  -mfloat-ieee
 -mexplicit-relocs  -msmall-data  -mlarge-data
 -msmall-text  -mlarge-text
@@ -2613,8 +2614,8 @@ ISO C23.
 @item -fno-builtin
 @itemx -fno-builtin-@var{function}
 Don't recognize built-in functions that do not begin with
-@samp{__builtin_} as prefix.  @xref{Other Builtins,,Other built-in
-functions provided by GCC}, for details of the functions affected,
+@samp{__builtin_} as prefix.  @xref{Library Builtins},
+for details of the functions affected,
 including those which are not built-in functions when @option{-ansi} or
 @option{-std} options for strict ISO C conformance are used because they
 do not have an ISO standard meaning.
@@ -26302,6 +26303,24 @@ CIX, FIX and MAX instruction sets.  The default is to use the instruction
 sets supported by the CPU type specified via @option{-mcpu=} option or that
 of the CPU on which GCC was built if none is specified.
 
+@opindex msafe-bwa
+@opindex mno-safe-bwa
+@item -msafe-bwa
+@itemx -mno-safe-bwa
+Indicate whether in the absence of the optional BWX instruction set
+GCC should generate multi-thread and async-signal safe code for byte
+and aligned word memory accesses.
+
+@opindex msafe-partial
+@opindex mno-safe-partial
+@item -msafe-partial
+@itemx -mno-safe-partial
+Indicate whether GCC should generate multi-thread and async-signal
+safe code for partial memory accesses, including piecemeal accesses
+to unaligned data as well as block accesses to leading and trailing
+parts of aggregate types or other objects in memory that do not
+respectively start and end on an aligned 64-bit data boundary.
+
 @opindex mfloat-vax
 @opindex mfloat-ieee
 @item -mfloat-vax
@@ -28000,8 +28019,8 @@ Use (do not use) @code{amcas[_db].@{b/h/w/d@}} instructions.  When build with
 @opindex mno-ld-seq-sa
 @item -mld-seq-sa
 @itemx -mno-ld-seq-sa
-Whether a load-load barrier (@code{dbar 0x700}) is needed.  When build with
-@option{-march=la664}, it is enabled by default.  The default is
+Whether a same-address load-load barrier (@code{dbar 0x700}) is needed.  When
+build with @option{-march=la664}, it is enabled by default.  The default is
 @option{-mno-ld-seq-sa}, the load-load barrier is needed.
 
 @opindex mtls-dialect

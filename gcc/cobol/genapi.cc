@@ -48,7 +48,6 @@
 #include "genmath.h"
 #include "structs.h"
 #include "../../libgcobol/gcobolio.h"
-#include "../../libgcobol/libgcobol.h"
 #include "../../libgcobol/charmaps.h"
 #include "../../libgcobol/valconv.h"
 #include "show_parse.h"
@@ -4800,14 +4799,13 @@ parser_display_internal(tree file_descriptor,
   else if( refer.field->type == FldLiteralN )
     {
     // The parser found the string of digits from the source code and converted
-    // it to a _Float128.
+    // it to a 128-bit binary floating point number.
 
     // The bad news is that something like 555.55 can't be expressed exactly;
     // internally it is 555.5499999999....
 
-    // The good news is that we know any string of 33 or fewer digits is
-    // converted to _Float128 and then converted back again, you get the same
-    // string.
+    // The good news is that we know any string of 33 or fewer decimal digits
+    // can be converted to and from IEEE 754 binary128 without being changes
 
     // We make use of that here
 
@@ -12395,13 +12393,14 @@ create_and_call(size_t narg,
       // We got back a 64-bit or 128-bit integer.  The called and calling
       // programs have to agree on size, but other than that, integer numeric
       // types are converted one to the other.
+
       gg_call(VOID,
               "__gg__int128_to_qualified_field",
               gg_get_address_of(returned.field->var_decl_node),
               refer_offset_dest(returned),
               refer_size_dest(returned),
               gg_cast(INT128, returned_value),
-              member(returned.field->var_decl_node, "rdigits"),
+              gg_cast(INT, member(returned.field->var_decl_node, "rdigits")),
               build_int_cst_type(INT, truncation_e),
               null_pointer_node,
               NULL_TREE );
@@ -15680,24 +15679,23 @@ initial_from_float128(cbl_field_t *field)
 
     case FldFloat:
       {
-      tree tem;
       retval = (char *)xmalloc(field->data.capacity);
       switch( field->data.capacity )
         {
         case 4:
           value = real_value_truncate (TYPE_MODE (FLOAT), value);
-          tem = build_real (FLOAT, value);
-          native_encode_expr (tem, (unsigned char *)retval, 4, 0);
+          native_encode_real (SCALAR_FLOAT_TYPE_MODE (FLOAT), &value,
+			      (unsigned char *)retval, 4, 0);
           break;
         case 8:
           value = real_value_truncate (TYPE_MODE (DOUBLE), value);
-          tem = build_real (DOUBLE, value);
-          native_encode_expr (tem, (unsigned char *)retval, 8, 0);
+          native_encode_real (SCALAR_FLOAT_TYPE_MODE (DOUBLE), &value,
+			      (unsigned char *)retval, 8, 0);
           break;
         case 16:
           value = real_value_truncate (TYPE_MODE (FLOAT128), value);
-          tem = build_real (FLOAT128, value);
-          native_encode_expr (tem, (unsigned char *)retval, 16, 0);
+          native_encode_real (SCALAR_FLOAT_TYPE_MODE (FLOAT128), &value,
+			      (unsigned char *)retval, 16, 0);
           break;
         }
       break;
